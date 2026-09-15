@@ -59,6 +59,7 @@ AVAILABLE_LLMS = [
     "gemini-2.0-flash-thinking-exp-01-21",
     "gemini-2.5-pro-preview-03-25",
     "gemini-2.5-pro-exp-03-25",
+    "gemini-3.6-flash",
 ]
 
 

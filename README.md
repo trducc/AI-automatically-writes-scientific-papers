@@ -58,6 +58,27 @@ We provide all runs and data from our paper [here](https://drive.google.com/driv
 
 We provide three templates, which were used in our paper, covering the following domains: **NanoGPT**, **2D Diffusion**, and **Grokking**. These templates enable The AI Scientist to generate ideas and conduct experiments in these areas. We accept contributions of new templates from the community, but please note that they are not maintained by us. All other templates beyond the three provided are community contributions.
 
+## Smart Research Lab Demo
+
+This fork includes a Streamlit demo that presents the research workflow as four shared-state agents:
+
+```text
+Planner -> Researcher -> Writer -> Reviewer
+```
+
+The demo reads the saved nanoGPT artifacts from `results/nanoGPT/`, displays the experiment metrics and review scores, and generates a topic-specific PDF report without calling an external API or retraining a model.
+
+### Run the demo
+
+```powershell
+py -3.11 -m venv env
+.\env\Scripts\Activate.ps1
+pip install -r requirements.txt
+streamlit run app.py -- --demo
+```
+
+Open `http://localhost:8501`, enter a research topic, and click **Generate paper**. The generated PDF is saved under `results/smart_research_lab/`.
+
 ## Requirements
 
 This code is designed to run on Linux with NVIDIA GPUs using CUDA and PyTorch. Support for other GPU architectures may be possible by following the [PyTorch guidelines](https://pytorch.org/get-started/locally/). The current templates would likely take an infeasible amount of time on CPU-only machines. Running on other operating systems may require significant adjustments.

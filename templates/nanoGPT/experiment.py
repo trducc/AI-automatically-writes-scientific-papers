@@ -319,24 +319,26 @@ def train(dataset="shakespeare_char", out_dir="run_0", seed_offset=0):
     # default config values designed to train a gpt2 (124M) on OpenWebText
     # data
     gradient_accumulation_steps = 1
-    batch_size = 64 if dataset == "shakespeare_char" else 32
-    block_size = 256  # context of up to 256 previous characters
+    use_cuda = torch.cuda.is_available()
+    batch_size = (64 if dataset == "shakespeare_char" else 32) if use_cuda else 8
+    block_size = 256 if use_cuda else 64
     # I/O
-    eval_interval = 250 if dataset == "shakespeare_char" else 1000
-    log_interval = 10 if dataset == "shakespeare_char" else 100
-    eval_iters = 200
+    eval_interval = (250 if dataset == "shakespeare_char" else 1000) if use_cuda else 10
+    log_interval = (10 if dataset == "shakespeare_char" else 100) if use_cuda else 5
+    eval_iters = 20 if not use_cuda else 200
     eval_only = False  # if True, script exits right after the first eval
     always_save_checkpoint = False  # we expect to overfit on this small dataset, so only save when val improves
     never_save_checkpoint = True  # never save checkpoints
     # model
-    n_layer = 6  # baby GPT model :)
-    n_head = 6
-    n_embd = 384
+    n_layer = 6 if use_cuda else 2
+    n_head = 6 if use_cuda else 2
+    n_embd = 384 if use_cuda else 128
     dropout = 0.2  # for pretraining 0 is good, for finetuning try 0.1+
     bias = False  # do we use bias inside LayerNorm and Linear layers?
     # adamw optimizer
     learning_rate = 1e-3 if dataset == "shakespeare_char" else 5e-4
-    max_iters = 5000 if dataset == "shakespeare_char" else 100000
+    default_max_iters = 5000 if dataset == "shakespeare_char" else 100000
+    max_iters = default_max_iters if use_cuda else 20
     weight_decay = 1e-1
     beta1 = 0.9
     beta2 = 0.99  # make a bit bigger because number of tokens per iter is small
@@ -349,13 +351,13 @@ def train(dataset="shakespeare_char", out_dir="run_0", seed_offset=0):
     # DDP settings
     backend = "nccl"  # 'nccl', 'gloo', etc.
     # system
-    device = "cuda"  # Always use CUDA
+    device = "cuda" if use_cuda else "cpu"
     dtype = (
         "bfloat16"
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
         else "float16"
     )  # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
-    compile = True  # do not torch compile the model on macbooks
+    compile = use_cuda
 
     # various inits, derived attributes, I/O setup
     # if not ddp, we are running on a single gpu, and one process
