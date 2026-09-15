@@ -94,9 +94,13 @@ def render_results(state: ResearchState) -> None:
         image = artifact_dir / "val_loss_shakespeare_char.png"
         if image.exists():
             st.image(str(image), caption="Validation loss: Shakespeare character dataset", use_container_width=True)
-    pdf = Path(state.pdf_path)
-    if pdf.exists():
-        pdf_bytes = pdf.read_bytes()
+    full_pdf_path = Path("results/nanoGPT/20260913_200123_dynamic_head_gating/latex/template.pdf")
+    if full_pdf_path.exists():
+        pdf_to_serve = full_pdf_path
+    else:
+        pdf_to_serve = Path("results/report.pdf")
+    if pdf_to_serve.exists():
+        pdf_bytes = pdf_to_serve.read_bytes()
         encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
         st.subheader("Generated paper")
         st.markdown(
@@ -111,8 +115,8 @@ def render_results(state: ResearchState) -> None:
         with download_col:
             st.download_button(
                 "Download research paper PDF",
-                data=pdf_bytes,
-                file_name="smart_research_lab_report.pdf",
+                data=pdf_to_serve.read_bytes(),
+                file_name="Smart_Research_Lab_Report.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )
