@@ -190,7 +190,10 @@ def main() -> None:
             with st.expander("Shared state JSON"):
                 st.json(state.model_dump(mode="json"))
     with right:
-        render_review(state) if state else st.info("Reviewer scores will appear here.")
+        if state:
+            render_review(state)
+        else:
+            st.info("Reviewer scores will appear here.")
 
     if state:
         render_results(state)
