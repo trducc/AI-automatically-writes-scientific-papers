@@ -157,7 +157,7 @@ def load_demo_results(state: ResearchState) -> ResearchState:
         return state
     state.artifact_dir = str(artifact)
     state.experiment_results = {"artifact": artifact.name, "runs": {}, "datasets": ["shakespeare_char", "enwik8", "text8"]}
-    for run in ("run_0", "run_1"):
+    for run in ("run_0", "run_1", "run_2", "run_3", "run_4"):
         state.experiment_results["runs"][run] = load_json(artifact / run / "final_info.json", {})
     state.log("System", f"Loaded saved results from {artifact.name}.")
     return state
@@ -169,7 +169,12 @@ def run_workflow(topic: str, demo: bool = True) -> ResearchState:
         load_demo_results(state)
     for agent in (PlannerAgent(), ResearcherAgent(), WriterAgent(), ReviewerAgent()):
         agent.run(state, demo=demo)
-    state.pdf_path = create_generated_pdf(state)
+    artifact_pdf = Path(state.artifact_dir) / "latex" / "template.pdf" if state.artifact_dir else None
+    if demo and artifact_pdf and artifact_pdf.exists():
+        state.pdf_path = str(artifact_pdf)
+        state.log("System", "Using the full compiled LaTeX paper from the saved nanoGPT artifact.")
+    else:
+        state.pdf_path = create_generated_pdf(state)
     state.log("System", "Generated a topic-specific PDF report for download.")
     return state
 
