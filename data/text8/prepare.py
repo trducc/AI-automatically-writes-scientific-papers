@@ -6,8 +6,12 @@ encoder and decoder and some other related info.
 """
 import os
 import pickle
-import requests
+import sys
 import numpy as np
+import requests
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 # download the text8 dataset
 input_file_path = os.path.join(os.path.dirname(__file__), 'text8')
