@@ -6,6 +6,7 @@ import io
 import os
 import pickle
 import random
+import re
 import time
 import zipfile
 from pathlib import Path
@@ -179,6 +180,65 @@ def render_pipeline(state: ResearchState | None) -> None:
         else:
             column.info(f"WAIT  {name}")
 
+    if state and state.logs:
+        llm_errors = [log for log in state.logs if log.agent == "LLM_Error"]
+        if llm_errors:
+            for err in llm_errors:
+                st.error(f"❌ **LLM Inference Error**: {err.message}")
+            st.info("💡 **Why fallback happened**: The system used the offline template because the LLM call returned an error (e.g. invalid API key, quota limit, or unreachable endpoint). Please check your key or endpoint and try again.")
+
+        llm_successes = [log for log in state.logs if log.agent == "LLM_Success"]
+        if llm_successes:
+            for succ in llm_successes:
+                st.success(f"⚡ **LLM Active**: {succ.message}")
+
+    if state and (state.plan or state.research_evidence or state.draft or state.review):
+        st.markdown("---")
+        st.markdown("### 🤖 Multi-Agent Artifacts & Execution Breakdown")
+        tab_planner, tab_researcher, tab_writer, tab_reviewer = st.tabs([
+            "🧠 Planner Agent", 
+            "📚 Researcher Agent", 
+            "✍️ Writer Agent", 
+            "⚖️ Reviewer Agent"
+        ])
+
+        with tab_planner:
+            st.markdown(f"#### 🧠 Proposal & Plan (Planner Agent - {state.model_name})")
+            if "proposal_text" in state.plan:
+                st.markdown(state.plan["proposal_text"])
+            else:
+                st.write(f"**Hypothesis**: {state.plan.get('hypothesis', '')}")
+                st.write(f"**Methodology**: {state.plan.get('method', '')}")
+                st.write(f"**Evaluation Metrics**: {', '.join(state.plan.get('metrics', []))}")
+
+        with tab_researcher:
+            st.markdown(f"#### 📚 Evidence Dossier (Researcher Agent - {len(state.research_evidence)} citations compiled)")
+            for i, ev in enumerate(state.research_evidence, 1):
+                st.markdown(f"**{i}. {ev.title}** ({ev.source})")
+                st.caption(f"Excerpt: {ev.excerpt}")
+
+        with tab_writer:
+            st.markdown(f"#### ✍️ Article Draft (Writer Agent)")
+            if state.draft:
+                with st.expander("View Generated Draft Text", expanded=True):
+                    st.markdown(state.draft[:4000] + ("\n\n*(Full text compiled into PDF report...)*" if len(state.draft) > 4000 else ""))
+
+        with tab_reviewer:
+            st.markdown(f"#### ⚖️ Peer Review Report (Reviewer Agent)")
+            if state.review:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Decision", state.review.decision)
+                c2.metric("Overall Score", f"{state.review.overall:.2f} / 1.00")
+                c3.metric("Faithfulness", f"{state.review.faithfulness:.2f}")
+                st.write("**Peer Reviewer Feedback:**")
+                for fb in state.review.feedback:
+                    st.write(f"• {fb}")
+
+    if state and state.logs:
+        with st.expander("📋 Agent Execution Trace & Detailed Logs", expanded=False):
+            for log in state.logs:
+                st.write(f"**[{log.timestamp}] [{log.agent}]**: {log.message}")
+
 
 def render_dashboard(data: dict[str, Any], state: ResearchState | None) -> None:
     st.header("Dashboard & Metrics")
@@ -269,13 +329,22 @@ def dataset_metadata(dataset: str) -> dict[str, Any]:
     try:
         train = directory / "train.bin"
         val = directory / "val.bin"
+        if not train.exists() or not val.exists():
+            result["Error"] = "Dataset not prepared yet (missing train.bin / val.bin)."
+            return result
         meta: dict[str, Any] = {}
         if (directory / "meta.pkl").exists():
             with (directory / "meta.pkl").open("rb") as handle:
                 meta = pickle.load(handle)
-        result.update({"Train size (MB)": round(train.stat().st_size / 1_000_000, 3), "Validation size (MB)": round(val.stat().st_size / 1_000_000, 3), "Vocab size": meta.get("vocab_size", "unknown"), "Status": "Ready"})
+        result.update({
+            "Train size (MB)": round(train.stat().st_size / 1_000_000, 3),
+            "Validation size (MB)": round(val.stat().st_size / 1_000_000, 3),
+            "Vocab size": meta.get("vocab_size", "unknown"),
+            "Status": "Ready",
+            "Error": "None",
+        })
     except (OSError, ValueError, TypeError, EOFError, KeyError) as error:
-        result["Error"] = str(error)
+        result["Error"] = f"Error loading dataset: {error}"
     return result
 
 
@@ -283,6 +352,26 @@ def render_dataset_explorer() -> None:
     st.header("Dataset Explorer")
     dataset = st.selectbox("Dataset", DATASETS, key="explorer_dataset")
     st.dataframe(pd.DataFrame([dataset_metadata(name) for name in DATASETS]), width="stretch", hide_index=True)
+    
+    current_meta = dataset_metadata(dataset)
+    if current_meta.get("Status") != "Ready":
+        st.warning(f"Dataset '{dataset}' has not been prepared yet.")
+        if st.button(f"Prepare {dataset} dataset", type="primary", width="stretch"):
+            with st.spinner(f"Downloading & preparing {dataset}..."):
+                try:
+                    import sys
+                    import subprocess
+                    prep_script = DATA_ROOT / dataset / "prepare.py"
+                    if prep_script.exists():
+                        subprocess.run([sys.executable, str(prep_script)], check=True, cwd=str(DATA_ROOT / dataset))
+                        st.success(f"Dataset '{dataset}' prepared successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"prepare.py not found for {dataset}.")
+                except Exception as error:
+                    st.error(f"Failed to prepare {dataset}: {error}")
+        return
+
     split = st.radio("Split", ("train", "val"), horizontal=True)
     if st.button("Load random sample", width="stretch"):
         path = DATA_ROOT / dataset / f"{split}.bin"
@@ -297,40 +386,78 @@ def render_dataset_explorer() -> None:
             st.warning(f"Sample unavailable: {error}")
 
 
-def render_report_artifacts(data: dict[str, Any], state: ResearchState | None) -> None:
+def get_pdf_for_topic(topic: str, state: ResearchState | None, artifact: Path | None) -> Path | None:
+    if state and state.pdf_path and Path(state.pdf_path).exists():
+        return Path(state.pdf_path)
+    safe = re.sub(r"[^a-zA-Z0-9_-]+", "_", topic).strip("_")[:48] or "research_paper"
+    expected = ROOT / "results" / "smart_research_lab" / f"{safe}.pdf"
+    if expected.exists():
+        return expected
+    pdfs = list((ROOT / "results" / "smart_research_lab").glob("*.pdf"))
+    if pdfs:
+        return sorted(pdfs, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+    if artifact and (artifact / "latex" / "template.pdf").exists():
+        return artifact / "latex" / "template.pdf"
+    return None
+
+
+def render_report_artifacts(data: dict[str, Any], state: ResearchState | None, topic: str) -> None:
     st.header("Report & Artifacts")
     artifact = data.get("artifact")
-    if artifact is None:
-        st.warning("No artifact directory is available.")
-        return
-    try:
-        files = [path for path in artifact.rglob("*") if path.is_file() and path.suffix.lower() in {".json", ".npy", ".png", ".txt", ".md", ".pdf", ".pt"}]
-    except OSError as error:
-        st.warning(f"Could not enumerate artifacts: {error}")
-        files = []
-    pdf_path = Path(state.pdf_path) if state and state.pdf_path else artifact / "latex" / "template.pdf"
-    if pdf_path.exists():
+    pdf_path = get_pdf_for_topic(topic, state, artifact)
+
+    if pdf_path and pdf_path.exists():
+        st.subheader(f"Report viewer: {pdf_path.name}")
         encoded = base64.b64encode(pdf_path.read_bytes()).decode("ascii")
-        st.subheader("Report viewer")
-        st.markdown(f'<iframe src="data:application/pdf;base64,{encoded}" width="100%" height="720"></iframe>', unsafe_allow_html=True)
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in files:
-            try:
-                archive.write(path, path.relative_to(artifact))
-            except (OSError, ValueError):
-                continue
-    st.download_button("Download complete artifact bundle", buffer.getvalue(), "smart_research_artifacts.zip", "application/zip", width="stretch")
-    st.caption(f"Bundle includes {len(files)} available files. Checkpoints are included when present; this experiment may only contain metrics and plots.")
+        timestamp = int(time.time() * 1000)
+        st.markdown(f'<iframe src="data:application/pdf;base64,{encoded}#toolbar=1&navpanes=0&v={timestamp}" width="100%" height="720"></iframe>', unsafe_allow_html=True)
+        st.download_button(f"Download PDF ({pdf_path.name})", pdf_path.read_bytes(), pdf_path.name, "application/pdf", width="stretch")
+    else:
+        st.warning("No PDF report is available yet. Click 'Generate paper report' in the sidebar or Dashboard tab.")
+
+    if artifact:
+        try:
+            files = [path for path in artifact.rglob("*") if path.is_file() and path.suffix.lower() in {".json", ".npy", ".png", ".txt", ".md", ".pdf", ".pt"}]
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+                for path in files:
+                    try:
+                        archive.write(path, path.relative_to(artifact))
+                    except (OSError, ValueError):
+                        continue
+            st.download_button("Download complete artifact bundle", buffer.getvalue(), "smart_research_artifacts.zip", "application/zip", width="stretch")
+            st.caption(f"Bundle includes {len(files)} available files.")
+        except OSError as error:
+            st.warning(f"Could not enumerate artifacts: {error}")
 
 
-def render_workflow(state: ResearchState | None, topic: str, demo: bool) -> ResearchState | None:
-    if st.button("Generate demo report", type="primary", width="stretch"):
-        with st.status("Running shared-state workflow...", expanded=True) as status:
+def render_workflow(
+    state: ResearchState | None,
+    topic: str,
+    demo: bool,
+    model_provider: str = "demo_cpu",
+    model_name: str = "tiny-gpt2",
+    api_key: str = "",
+    local_endpoint: str = "http://localhost:11434/v1",
+    device_choice: str = "cuda:0",
+    detail_level: str = "Detailed (8 Pages)",
+) -> ResearchState | None:
+    if st.button("Generate paper report", type="primary", width="stretch", key="render_wf_btn"):
+        with st.status("Running multi-agent research workflow...", expanded=True) as status:
             try:
-                state = run_workflow(topic, demo=demo)
+                state = run_workflow(
+                    topic=topic,
+                    demo=demo,
+                    model_provider=model_provider,
+                    model_name=model_name,
+                    api_key=api_key,
+                    local_endpoint=local_endpoint,
+                    device_choice=device_choice,
+                    detail_level=detail_level,
+                )
                 st.session_state["research_state"] = state.model_dump(mode="json")
                 status.update(label="Workflow completed", state="complete")
+                st.rerun()
             except Exception as error:
                 st.error(f"Workflow failed safely: {error}")
     saved = st.session_state.get("research_state")
@@ -338,20 +465,102 @@ def render_workflow(state: ResearchState | None, topic: str, demo: bool) -> Rese
 
 
 def main() -> None:
-    st.markdown('<div class="hero"><h1>Smart Research Lab</h1><p>Professional research workflow for experiments, evidence, generation, and review.</p><span class="badge">CPU-SAFE · MODULAR · FALLBACK READY</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero"><h1>Smart Research Lab</h1><p>Professional research workflow for experiments, evidence, generation, and review.</p><span class="badge">LOCAL GPU ACCELERATED · MULTI-MODEL LLM · CPU FALLBACK READY</span></div>', unsafe_allow_html=True)
     with st.sidebar:
         st.header("Research control room")
-        topic = st.text_area("Research topic", "Dynamic Attention Head Gating: Soft Head Pruning and Capacity Allocation in Transformer Language Models", height=110)
-        demo = st.toggle("Demo mode", value=is_demo_default())
-        st.caption("Precomputed experiment artifacts are used in demo mode.")
+        topic = st.text_area("Research topic", "Dynamic Attention Head Gating: Soft Head Pruning and Capacity Allocation in Transformer Language Models", height=100)
+
+        st.subheader("🤖 Model & Hardware Engine")
+        engine_mode = st.selectbox(
+            "Execution Engine",
+            [
+                "🎮 Local GPU / Local LLM (Ollama / CUDA)",
+                "☁️ Cloud API (OpenAI / Claude / Gemini / DeepSeek)",
+                "⚡ Fast Demo / CPU Smoke Test Mode",
+            ],
+            index=0,
+            key="engine_mode_select",
+        )
+
+        model_name = "llama3.2"
+        api_key = ""
+        local_endpoint = "http://localhost:11434/v1"
+        device_choice = "NVIDIA GeForce RTX 3050 Ti Laptop GPU (4GB VRAM)"
+        demo = True
+
+        if "Local GPU" in engine_mode:
+            st.info("💻 Local Hardware: NVIDIA GeForce RTX 3050 Ti Laptop GPU (4GB VRAM)")
+            gpu_model = st.selectbox(
+                "Local Model Target",
+                [
+                    "Ollama: llama3.2 (Local GPU)",
+                    "Ollama: qwen2.5-coder (Local GPU)",
+                    "Ollama: mistral (Local GPU)",
+                    "PyTorch CUDA: Qwen/Qwen2.5-7B-Instruct",
+                    "Custom Local Endpoint (LM Studio / vLLM)",
+                ],
+                key="gpu_model_select",
+            )
+            local_endpoint = st.text_input("Local API Endpoint", "http://localhost:11434/v1", help="Ollama default is http://localhost:11434/v1, LM Studio is http://localhost:1234/v1")
+            model_name = gpu_model
+            demo = False
+
+        elif "Cloud API" in engine_mode:
+            cloud_provider = st.selectbox(
+                "Cloud Model Provider",
+                [
+                    "Google: gemini-2.5-flash",
+                    "Google: gemini-2.0-flash",
+                    "Google: gemini-1.5-flash",
+                    "Google: gemini-1.5-pro",
+                    "OpenAI: gpt-4o",
+                    "OpenAI: gpt-4o-mini",
+                    "Anthropic: claude-3-5-sonnet",
+                    "DeepSeek: deepseek-chat",
+                ],
+                key="cloud_model_select",
+            )
+            api_key = st.text_input("API Key", type="password", help="Enter Google AI Studio / OpenAI / DeepSeek / Anthropic API key")
+            model_name = cloud_provider
+            demo = False
+
+        else:
+            demo_model = st.selectbox("Demo Model", list(MODEL_OPTIONS.keys()))
+            model_name = MODEL_OPTIONS[demo_model] or "tiny-gpt2"
+            demo = True
+
+        detail_level = st.select_slider(
+            "Paper Detail Depth",
+            options=["Standard (4 Pages)", "Detailed (8 Pages)", "Comprehensive (12 Pages)"],
+            value="Detailed (8 Pages)",
+        )
+
+        if st.button("Generate paper report", type="primary", width="stretch", key="sidebar_gen_btn"):
+            with st.spinner(f"Generating research paper with {model_name}..."):
+                state = run_workflow(
+                    topic=topic,
+                    demo=demo,
+                    model_provider=engine_mode,
+                    model_name=model_name,
+                    api_key=api_key,
+                    local_endpoint=local_endpoint,
+                    device_choice=device_choice,
+                    detail_level=detail_level,
+                )
+                st.session_state["research_state"] = state.model_dump(mode="json")
+                st.success("Generated paper report!")
+                st.rerun()
+
         page = st.radio("Navigate", ("Dashboard & Metrics", "Text Generation Sandbox", "Architecture & Implementation", "Dataset Explorer", "Report & Artifacts"))
         artifact = latest_artifact()
         if artifact:
             st.caption(f"Artifact: {artifact.name}")
+
     state = ResearchState.model_validate(st.session_state["research_state"]) if st.session_state.get("research_state") else None
+
     if page == "Dashboard & Metrics":
         data = load_experiment_data()
-        state = render_workflow(state, topic, demo)
+        state = render_workflow(state, topic, demo, engine_mode, model_name, api_key, local_endpoint, device_choice, detail_level)
         render_pipeline(state)
         render_dashboard(data, state)
     elif page == "Text Generation Sandbox":
@@ -361,7 +570,7 @@ def main() -> None:
     elif page == "Dataset Explorer":
         render_dataset_explorer()
     else:
-        render_report_artifacts(load_experiment_data(), state)
+        render_report_artifacts(load_experiment_data(), state, topic)
 
 
 if __name__ == "__main__":
