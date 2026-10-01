@@ -5,9 +5,13 @@ backoff
 openai
 google-generativeai
 pydantic>=2.0
+fastapi>=0.110
+uvicorn[standard]>=0.30
+requests>=2.31
 streamlit>=1.36
 pandas>=2.0
 plotly>=5.20
+streamlit-extras>=1.6
 reportlab>=4.0
 # Viz
 matplotlib
