@@ -1,0 +1,45 @@
+name: ConvNeur Smoke Test & CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  smoke-test:
+    name: Model & Pipeline Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Verify repository structure & git tracking
+        run: |
+          # Verify binary dataset files are NOT tracked in git
+          if git ls-files | grep -E '^data/.*\.(pt|tar\.gz)$'; then
+            echo "ERROR: Binary dataset files found in git tracking!"
+            exit 1
+          fi
+          echo "Verified: No large binary datasets tracked in git."
+
+      - name: Run ConvNeur Smoke Test
+        run: |
+          python templates/convneur/smoke_test.py
+
+      - name: Run PyTest Suite
+        run: |
+          pytest tests/test_convneur_smoke.py -v

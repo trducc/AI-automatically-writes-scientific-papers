@@ -19,9 +19,13 @@ pypdf
 pymupdf4llm
 # Common Requirements
 torch
+torchvision
 numpy
 transformers
 datasets
+einops
+einx
+tensordict
 tiktoken
 wandb
 tqdm

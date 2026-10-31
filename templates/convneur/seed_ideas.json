@@ -1,0 +1,26 @@
+[
+  {
+    "Name": "dynamic_branch_allocation",
+    "Title": "Dynamic Branch Allocation in ConvNeur: Input-Dependent Global-Local Weighting",
+    "Experiment": "Modify the ConvNeur gate from a learned static sigmoid gate to an input-adaptive router that computes gating weights conditioned on the input feature map statistics (e.g., spatial frequency energy, patch entropy). Add a small lightweight MLP head that takes channel-wise statistics (mean, std, spatial gradient magnitude) and outputs per-sample gate weights. Compare vs. the static-gate baseline on CIFAR-10 and CIFAR-100 in terms of Top-1 accuracy, FLOPs, and inference latency. Ablate by also testing with random gating and fixed 0.5 gating to isolate the benefit of the adaptive router.",
+    "Interestingness": 8,
+    "Feasibility": 7,
+    "Novelty": 7
+  },
+  {
+    "Name": "asymmetric_branch_scaling",
+    "Title": "Asymmetric Branch Scaling: Does the Global Branch Need to Match the Local Branch?",
+    "Experiment": "Systematically vary the channel width ratio between the global (neural memory) branch and the local (convolution) branch: ratios [1:3, 1:2, 1:1, 2:1, 3:1]. For each ratio, keep total parameter count fixed by scaling down the wider branch. Measure Top-1 accuracy vs. FLOPs on CIFAR-10 and CIFAR-100. Visualize how the learned gate weights shift across ratios to determine whether the network compensates for branch imbalance automatically.",
+    "Interestingness": 7,
+    "Feasibility": 8,
+    "Novelty": 6
+  },
+  {
+    "Name": "layerwise_gate_analysis",
+    "Title": "Where Does Global Context Matter Most? Layer-wise Gate Analysis in ConvNeur",
+    "Experiment": "Train the baseline ConvNeur and log the learned gate values (sigmoid outputs) per layer throughout training. Hypothesize that early layers rely more on local branch and later layers on global branch. Test this by (a) freezing the gate of early layers to 0.1 (local-heavy) and late layers to 0.9 (global-heavy), and comparing vs. fully learned gates. Also test a monotonic gate schedule enforced via a regularization term. Report accuracy and per-layer gate histograms.",
+    "Interestingness": 8,
+    "Feasibility": 9,
+    "Novelty": 7
+  }
+]

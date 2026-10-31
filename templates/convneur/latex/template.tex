@@ -1,0 +1,193 @@
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2024_conference,times}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{titletoc}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{color}
+\usepackage{colortbl}
+\usepackage{cleveref}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+\graphicspath{{../}}
+\begin{filecontents}{references.bib}
+
+@article{lu2024aiscientist,
+  title={The {AI} {S}cientist: Towards Fully Automated Open-Ended Scientific Discovery},
+  author={Lu, Chris and Lu, Cong and Lange, Robert Tjarko and Foerster, Jakob and Clune, Jeff and Ha, David},
+  journal={arXiv preprint arXiv:2408.06292},
+  year={2024}
+}
+
+@inproceedings{yang2026convneur,
+  title={Efficiency Follows Global-Local Decoupling},
+  author={Yang, et al.},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2026},
+  url={https://openaccess.thecvf.com/content/CVPR2026/html/Yang_Efficiency_Follows_Global-Local_Decoupling_CVPR_2026_paper.html}
+}
+
+@inproceedings{howard2019mobilenetv3,
+  title={{MobileNetV3}: Searching for {MobileNetV3}},
+  author={Howard, Andrew and Sandler, Mark and Chu, Grace and Chen, Liang-Chieh and Chen, Bo and Tan, Mingxing and Wang, Weijun and Zhu, Yukun and Pang, Ruoming and Vasudevan, Vijay and Le, Quov and Adam, Hartwig},
+  booktitle={ICCV},
+  year={2019}
+}
+
+@inproceedings{tan2019efficientnet,
+  title={{EfficientNet}: Rethinking Model Scaling for Convolutional Neural Networks},
+  author={Tan, Mingxing and Le, Quov},
+  booktitle={ICML},
+  year={2019}
+}
+
+@inproceedings{liu2022convnext,
+  title={A {ConvNet} for the 2020s},
+  author={Liu, Zhuang and Mao, Hanzi and Wu, Chao-Yuan and Feichtenhofer, Christoph and Darrell, Trevor and Xie, Saining},
+  booktitle={CVPR},
+  year={2022}
+}
+
+@inproceedings{dosovitskiy2020vit,
+  title={An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale},
+  author={Dosovitskiy, Alexey and Beyer, Lucas and Kolesnikov, Alexander and Weissenborn, Dirk and Zhai, Xiaohua and Unterthiner, Thomas and Dehghani, Mostafa and Minderer, Matthias and Heigold, Georg and Gelly, Sylvain and Uszkoreit, Jakob and Houlsby, Neil},
+  booktitle={ICLR},
+  year={2021}
+}
+
+@inproceedings{he2016resnet,
+  title={Deep Residual Learning for Image Recognition},
+  author={He, Kaiming and Zhang, Xiangyu and Ren, Shaoqing and Sun, Jian},
+  booktitle={CVPR},
+  year={2016}
+}
+
+@article{hu2018senet,
+  title={Squeeze-and-Excitation Networks},
+  author={Hu, Jie and Shen, Li and Sun, Gang},
+  booktitle={CVPR},
+  year={2018}
+}
+
+\end{filecontents}
+
+\title{Improving Global-Local Decoupled Vision Architectures: \\
+       Investigating Gate Dynamics and Branch Allocation in ConvNeur}
+
+\author{Submission AI Scientist}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We study the global-local decoupling principle in efficient vision architectures, as instantiated in ConvNeur~\citep{yang2026convneur}. ConvNeur combines a lightweight neural memory branch for global context synthesis with a depthwise-separable convolutional branch for local detail preservation, merging outputs via a learned scalar gate. We conduct a systematic investigation of (1) how the learned gate behaves across layers and datasets, (2) whether the symmetric two-branch design is optimal or whether asymmetric channel allocation improves the accuracy/FLOPs trade-off, and (3) whether the gate can be replaced by an input-adaptive router for further gains. Our experiments on CIFAR-10 and CIFAR-100 reveal that \textbf{[FINDING TO BE FILLED BY AI]}. Our code and results are fully reproducible.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+Efficient vision architectures face a fundamental tension: global context is necessary for recognising objects that span large spatial regions, yet modelling global dependencies with full self-attention incurs quadratic cost in resolution. ConvNeur~\citep{yang2026convneur} addresses this by decoupling global and local processing into two branches per block, synthesising global context via a channel-MLP over globally-pooled features ($\mathcal{O}(HW \cdot C)$) and preserving local details via depthwise-separable convolution. A learned gate $\alpha \in (0, 1)$ blends the two branch outputs.
+
+While this design achieves competitive accuracy/latency trade-offs on large-scale benchmarks, several questions remain open. First, \textit{does the learned gate exhibit a consistent pattern across layers and tasks?} Second, \textit{is the symmetric branch design (equal channels in both branches) optimal?} Third, \textit{can an input-adaptive gate further improve results?}
+
+We address these questions through controlled ablations on CIFAR-10 and CIFAR-100, reporting accuracy, FLOPs, parameter count, and inference latency for each variant.
+
+\section{Background}
+\label{sec:background}
+Efficient vision architectures generally follow one of three strategies: (i) \textit{architecture search} (e.g., MobileNetV3~\citep{howard2019mobilenetv3}, EfficientNet~\citep{tan2019efficientnet}), (ii) \textit{hybrid local-global designs} (e.g., ConvNext~\citep{liu2022convnext}, ViT hybrids~\citep{dosovitskiy2020vit}), or (iii) \textit{channel attention} (e.g., SENet~\citep{hu2018senet}). ConvNeur occupies a unique position: it explicitly decouples and then re-couples global and local streams, with the blending ratio itself being a learned parameter.
+
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Baseline: ConvNeur}
+ConvNeur processes input $\mathbf{x} \in \mathbb{R}^{B \times C \times H \times W}$ through:
+\begin{align}
+\mathbf{g} &= \text{NeuralMemory}(\mathbf{x}) \quad \text{(global branch)} \\
+\mathbf{l} &= \text{DW-Sep-Conv}(\mathbf{x}) \quad \text{(local branch)} \\
+\mathbf{y} &= \alpha \cdot \mathbf{g} + (1 - \alpha) \cdot \mathbf{l} + \text{proj}(\mathbf{x})
+\end{align}
+where $\alpha = \sigma(\theta)$ is a per-channel scalar parameter initialised at 0.5.
+
+\subsection{Proposed Variants}
+\textbf{[TO BE FILLED BY AI SCIENTIST BASED ON EXPERIMENT RESULTS]}
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Setup}
+All models are trained on CIFAR-10 and CIFAR-100 for 100 epochs with SGD (Nesterov momentum 0.9, cosine LR decay from 0.1 to 0, weight decay $10^{-4}$, label smoothing 0.1). Batch size 128. FLOPs are counted for a single $32 \times 32$ image. Latency is measured as average single-image inference time over 100 forward passes.
+
+\subsection{Results}
+
+\begin{table}[h]
+\centering
+\caption{Comparison of ConvNeur variants. ``Gate'' indicates gate mechanism. Best results \textbf{bolded}.}
+\label{tab:main}
+\begin{tabular}{lcccccc}
+\toprule
+Method & Gate & CIFAR-10 & CIFAR-100 & FLOPs (M) & Params (M) & Latency (ms) \\
+\midrule
+ConvNeur (baseline) & Static $\alpha$ & -- & -- & -- & -- & -- \\
+\midrule
+\textit{Ablations} & & & & & & \\
+Local only & -- & -- & -- & -- & -- & -- \\
+Global only & -- & -- & -- & -- & -- & -- \\
+\midrule
+\textit{Proposed} & & & & & & \\
+\textbf{[VARIANT]} & \textbf{[GATE]} & \textbf{--} & \textbf{--} & \textbf{--} & \textbf{--} & \textbf{--} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\linewidth]{val_accuracy_curves.png}
+\includegraphics[width=0.48\linewidth]{accuracy_vs_flops.png}
+\caption{Left: Validation accuracy curves. Right: Accuracy vs.\ FLOPs trade-off.}
+\label{fig:curves}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\linewidth]{gate_values_per_layer.png}
+\caption{Learned gate values $\alpha$ per ConvNeurBlock layer. Values close to 1 indicate reliance on the global branch; values close to 0 indicate reliance on the local branch.}
+\label{fig:gates}
+\end{figure}
+
+\section{Analysis}
+\label{sec:analysis}
+\textbf{[TO BE FILLED BY AI SCIENTIST]}
+
+\section{Conclusion}
+\label{sec:conclusion}
+\textbf{[TO BE FILLED BY AI SCIENTIST]}
+
+\bibliography{references}
+\bibliographystyle{iclr2024_conference}
+
+\appendix
+\section{Hyperparameter Details}
+All experiments use the same base configuration: SGD with Nesterov momentum, cosine annealing LR schedule, 5-epoch linear warmup, label smoothing $\varepsilon = 0.1$, gradient clipping at norm 1.0, batch size 128.
+
+\section{Gate Value Tables}
+\textbf{[INSERT gate\_values\_by\_layer TABLE FROM final\_info.json]}
+
+\end{document}
