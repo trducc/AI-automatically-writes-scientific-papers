@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 import time
+import unicodedata
+import zipfile
+from datetime import datetime
 from io import BytesIO
 from html import escape
 from pathlib import Path
@@ -256,6 +260,133 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
     return buffer.getvalue()
 
 
+def _latex_escape(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii")
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    return "".join(replacements.get(char, char) for char in text)
+
+
+def _latex_source(paper: dict[str, Any], research: dict[str, Any]) -> str:
+    metadata = research.get("project_metadata") or {}
+    sections = [
+        ("Abstract", paper["abstract"]),
+        ("Keywords", ", ".join(paper["keywords"])),
+        ("1. Introduction", paper["introduction"]),
+        ("2. Related Work", paper["related_work"]),
+        ("3. Proposed Methodology", paper["methodology"]),
+        ("4. Experimental Setup and Results", paper["experimental_results"]),
+        ("5. Discussion", paper["discussion"]),
+        ("6. Conclusion", paper["conclusion"]),
+    ]
+    body = []
+    for heading, content in sections:
+        body.append(f"\\section{{{_latex_escape(heading)}}}\n{_latex_escape(content)}")
+    formulas = "\n".join(f"\\[\n{formula}\n\\]" for formula in paper.get("mathematical_formulas", []))
+    references = "\n".join(
+        f"\\item {_latex_escape(reference)}" for reference in paper.get("references", [])
+    )
+    threats = "".join(
+        f"\\item {_latex_escape(item)}\n" for item in paper.get("threats_to_validity", [])
+    )
+    return rf"""\documentclass[10pt,twocolumn]{{article}}
+\usepackage{{amsmath,amssymb}}
+\usepackage[margin=16mm]{{geometry}}
+\usepackage[T1]{{fontenc}}
+\usepackage[utf8]{{inputenc}}
+\usepackage{{parskip}}
+\usepackage{{xcolor}}
+\usepackage{{hyperref}}
+\title{{{_latex_escape(paper["title"])}}}
+\author{{{_latex_escape(metadata.get("student_name", "Trần Văn Đức"))} \\
+{_latex_escape(metadata.get("institution", "Học viện Công nghệ Bưu chính Viễn thông (PTIT)"))}\\
+GVHD: {_latex_escape(metadata.get("instructor", "TS. Hoàng Mạnh Cường"))} \\
+MSV: {_latex_escape(metadata.get("student_id", "B23DCCN191"))}}}
+\date{{}}
+\begin{{document}}
+\maketitle
+{chr(10).join(body)}
+\section{{Mathematical Formulation}}
+{formulas}
+\section{{Threats to Validity}}
+\begin{{itemize}}
+{threats}
+\end{{itemize}}
+\section{{References}}
+\begin{{enumerate}}
+{references}
+\end{{enumerate}}
+\end{{document}}
+"""
+
+
+def persist_artifacts(paper: dict[str, Any], research: dict[str, Any], pdf: bytes) -> tuple[bytes, Path]:
+    root = Path(__file__).resolve().parent / "results" / "artifacts"
+    slug = re.sub(r"[^a-z0-9]+", "-", paper["title"].lower()).strip("-")[:70] or "research-paper"
+    run_dir = root / f"{slug}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    charts_dir = run_dir / "charts"
+    charts_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "paper.pdf").write_bytes(pdf)
+    (run_dir / "paper.tex").write_text(_latex_source(paper, research), encoding="utf-8")
+    (run_dir / "benchmark_matrix.json").write_text(
+        json.dumps(
+            {
+                "evidence_status": research.get("evidence_mode", "Unknown"),
+                "topic": paper["title"],
+                "rows": research.get("benchmark_table", []),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    try:
+        import matplotlib.pyplot as plt
+
+        curves = pd.DataFrame(research.get("training_curves", []))
+        if not curves.empty:
+            figure, axis = plt.subplots(figsize=(8, 4.5))
+            for column, label in (("proposed_loss", "Loss"), ("proposed_score", "Primary metric")):
+                if column in curves:
+                    axis.plot(curves["epoch"], curves[column], marker="o", label=label)
+            axis.set_title("Training curves")
+            axis.set_xlabel("Epoch")
+            axis.grid(alpha=0.25)
+            axis.legend()
+            figure.tight_layout()
+            figure.savefig(charts_dir / "loss_curve.png", dpi=160)
+            plt.close(figure)
+        benchmark = pd.DataFrame(research.get("benchmark_table", []))
+        if not benchmark.empty and {"model_name", "primary_metric"}.issubset(benchmark.columns):
+            figure, axis = plt.subplots(figsize=(8, 4.5))
+            axis.bar(benchmark["model_name"], benchmark["primary_metric"])
+            axis.set_title("Benchmark matrix: primary metric")
+            axis.tick_params(axis="x", labelrotation=25)
+            figure.tight_layout()
+            figure.savefig(charts_dir / "benchmark_matrix.png", dpi=160)
+            plt.close(figure)
+    except ImportError:
+        (charts_dir / "README.txt").write_text("Install matplotlib to generate PNG charts.\n", encoding="utf-8")
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in run_dir.rglob("*"):
+            if path.is_file():
+                archive.write(path, path.relative_to(run_dir))
+    zip_bytes = zip_buffer.getvalue()
+    (run_dir / "artifacts.zip").write_bytes(zip_bytes)
+    return zip_bytes, run_dir
+
+
 def answer_paper_question(question: str, paper: dict[str, Any], research: dict[str, Any]) -> str:
     payload = {"question": question, "paper": paper, "research": research}
     try:
@@ -314,8 +445,8 @@ def render_benchmarks(research: dict[str, Any]) -> None:
     if HAS_PLOTLY:
         loss = curves[["epoch", "proposed_loss"]].rename(columns={"proposed_loss": "Loss"})
         score = curves[["epoch", "proposed_score"]].rename(columns={"proposed_score": "Primary Metric"})
-        left.plotly_chart(px.line(loss, x="epoch", y="Loss", color="Series", markers=True, template="plotly_dark", title="Training / validation loss"), width="stretch")
-        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", color="Series", markers=True, template="plotly_dark", title="Performance growth"), width="stretch")
+        left.plotly_chart(px.line(loss, x="epoch", y="Loss", markers=True, template="plotly_dark", title="Training / validation loss"), width="stretch")
+        right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", markers=True, template="plotly_dark", title="Performance growth"), width="stretch")
     st.subheader("Proposed Method Evaluation Matrix")
     benchmark = pd.DataFrame(research["benchmark_table"])
     benchmark = benchmark[benchmark["role"] == "Proposed"]
@@ -416,8 +547,9 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         "benchmark_table": [item for item in research.get("benchmark_table", []) if item.get("role") == "Proposed"],
     }
     pdf = pdf_report(paper, export_research)
+    zip_bytes, artifact_dir = persist_artifacts(paper, export_research, pdf)
     st.title(paper["title"])
-    st.caption("Full Academic Manuscript · IEEE/NeurIPS-inspired structure")
+    st.caption(f"Full Academic Manuscript · IEEE/NeurIPS-inspired structure · Artifacts: `{artifact_dir}`")
     sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"])]
     for title, body in sections:
         st.subheader(title)
@@ -450,6 +582,13 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         pdf,
         "research_paper.pdf",
         "application/pdf",
+        width="stretch",
+    )
+    st.download_button(
+        "📦 Download All Artifacts (.ZIP)",
+        zip_bytes,
+        "research_artifacts.zip",
+        "application/zip",
         width="stretch",
     )
     st.divider()
