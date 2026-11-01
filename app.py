@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import base64
 import re
+import tempfile
 import time
 import unicodedata
 import zipfile
@@ -16,6 +17,8 @@ import pandas as pd
 import requests
 import streamlit as st
 from streamlit.errors import StreamlitAPIException
+from backend.guardrail_agent import audit_manuscript
+from chart_generator import generate_research_charts
 
 try:
     import plotly.express as px
@@ -192,7 +195,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import mm
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
     buffer = BytesIO()
     document = SimpleDocTemplate(
@@ -286,6 +289,10 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         [item["model_name"], item["dataset_name"], item["role"], item["primary_metric"], item["latency_ms"], item.get("vram_mb", 0), item.get("flops_g", 0), item.get("evidence_type", "Planned")]
         for item in benchmark
     ], [31 * mm, 28 * mm, 16 * mm, 16 * mm, 17 * mm, 18 * mm, 15 * mm, 25 * mm])
+    with tempfile.TemporaryDirectory(prefix="smart-research-charts-") as chart_dir:
+        for chart_path in generate_research_charts(research, chart_dir):
+            story.append(Image(BytesIO(chart_path.read_bytes()), width=170 * mm, height=70 * mm))
+            story.append(Spacer(1, 5))
     story.append(Paragraph("7. References", heading_style))
     for index, reference in enumerate(paper.get("references", []), 1):
         story.append(Paragraph(f"{index}. {escape(reference)}", small_style))
@@ -332,9 +339,8 @@ def _latex_source(paper: dict[str, Any], research: dict[str, Any]) -> str:
     threats = "".join(
         f"\\item {_latex_escape(item)}\n" for item in paper.get("threats_to_validity", [])
     )
-    return rf"""\documentclass[10pt,twocolumn]{{article}}
+    return rf"""\documentclass[10pt,conference]{{IEEEtran}}
 \usepackage{{amsmath,amssymb}}
-\usepackage[margin=16mm]{{geometry}}
 \usepackage[T1]{{fontenc}}
 \usepackage[utf8]{{inputenc}}
 \usepackage{{parskip}}
@@ -369,6 +375,10 @@ def persist_artifacts(paper: dict[str, Any], research: dict[str, Any], pdf: byte
     run_dir = root / f"{slug}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
     charts_dir = run_dir / "charts"
     charts_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "guardrail_report.json").write_text(
+        json.dumps(audit_manuscript(paper, research), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (run_dir / "paper.pdf").write_bytes(pdf)
     (run_dir / "paper.tex").write_text(_latex_source(paper, research), encoding="utf-8")
     (run_dir / "benchmark_matrix.json").write_text(
@@ -384,6 +394,7 @@ def persist_artifacts(paper: dict[str, Any], research: dict[str, Any], pdf: byte
         encoding="utf-8",
     )
     try:
+        generate_research_charts(research, charts_dir)
         import matplotlib.pyplot as plt
 
         curves = pd.DataFrame(research.get("training_curves", []))

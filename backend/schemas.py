@@ -157,6 +157,14 @@ class ReviewerOutput(BaseModel):
     verdict: Literal["ACCEPT", "MINOR_REVISION", "MAJOR_REVISION", "REJECT"]
 
 
+class GuardrailOutput(BaseModel):
+    status: Literal["passed", "needs_review"]
+    issues: list[dict[str, str]] = Field(default_factory=list)
+    formula_count: int = Field(default=0, ge=0)
+    row_count: int = Field(default=0, ge=0)
+    evidence_labels: list[str] = Field(default_factory=list)
+
+
 class PlannerExperimentStep(BaseModel):
     step_id: str = Field(...)
     name: str = Field(...)
@@ -187,3 +195,4 @@ class FullPipelineResponse(BaseModel):
     research: ResearcherOutput
     paper: WriterOutput
     review: ReviewerOutput
+    guardrail: GuardrailOutput

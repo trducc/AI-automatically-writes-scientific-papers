@@ -29,7 +29,9 @@ from backend.schemas import (
     ReviewerOutput,
     TopicInput,
     WriterOutput,
+    GuardrailOutput,
 )
+from backend.guardrail_agent import audit_manuscript
 
 MASTER_RESEARCH_WRITER_PROMPT = """
 You are a Principal AI Research Scientist writing a full-length, dense academic
@@ -1007,8 +1009,11 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     live_paper = _maybe_live_writer(plan, research, api_key)
     paper = live_paper or _build_synthesis_writer(plan, research)
     paper.abstract = _academic_abstract(paper.abstract)
+    guardrail = GuardrailOutput.model_validate(
+        audit_manuscript(paper.model_dump(), research.model_dump())
+    )
     review = _build_dynamic_reviewer(paper, research)
-    return FullPipelineResponse(mode_used=mode_used, paper_mode="live_gemini" if live_paper else "dynamic_fallback", plan=plan, research=research, paper=paper, review=review)
+    return FullPipelineResponse(mode_used=mode_used, paper_mode="live_gemini" if live_paper else "dynamic_fallback", plan=plan, research=research, paper=paper, review=review, guardrail=guardrail)
 
 
 @app.get("/health")
