@@ -32,6 +32,7 @@ from backend.schemas import (
     GuardrailOutput,
 )
 from backend.guardrail_agent import audit_manuscript
+from academic_sanitizer import sanitize_academic_topic
 
 MASTER_RESEARCH_WRITER_PROMPT = """
 You are a Principal AI Research Scientist writing a full-length, dense academic
@@ -97,7 +98,7 @@ PTIT_COURSE_METADATA = {
 
 
 def _normalize_topic(topic: str) -> str:
-    return re.sub(r"\s+", " ", topic.strip())
+    return sanitize_academic_topic(topic)
 
 
 def _academic_abstract(text: str) -> str:
@@ -1023,8 +1024,8 @@ def health() -> dict[str, str]:
 
 @app.post("/api/planner/generate", response_model=PlannerOutput)
 def generate_planner_plan(payload: TopicInput) -> PlannerOutput:
-    if not payload.topic or len(payload.topic.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Topic must be at least 3 characters long.")
+    if not payload.topic or not payload.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
     request = PipelineRequest(topic=payload.topic, domain=payload.domain, objective=payload.objective, constraints=None, api_key=None)
     return _run_pipeline_request(request).plan
 

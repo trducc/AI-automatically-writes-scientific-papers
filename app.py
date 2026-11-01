@@ -19,6 +19,7 @@ import streamlit as st
 from streamlit.errors import StreamlitAPIException
 from backend.guardrail_agent import audit_manuscript
 from chart_generator import generate_research_charts
+from academic_sanitizer import sanitize_academic_topic
 
 try:
     import plotly.express as px
@@ -101,6 +102,7 @@ def apply_preset() -> None:
 
 
 def run_pipeline(topic: str, domain: str, objective: str, constraints: str) -> dict[str, Any] | None:
+    topic = sanitize_academic_topic(topic)
     payload = {
         "topic": topic,
         "domain": domain,

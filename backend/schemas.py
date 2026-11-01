@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class TopicInput(BaseModel):
-    topic: str = Field(..., min_length=3, description="Research topic in English")
+    topic: str = Field(..., min_length=1, description="Research topic in English or Vietnamese")
     domain: str | None = Field(default=None, description="Optional domain or subject area")
     objective: str | None = Field(default=None, description="Optional objective or desired goal")
     constraints: list[str] = Field(default_factory=list, description="Optional constraints")
@@ -180,7 +180,7 @@ class PlannerResponse(BaseModel):
 
 
 class PipelineRequest(BaseModel):
-    topic: str = Field(..., min_length=3)
+    topic: str = Field(..., min_length=1)
     domain: str | None = Field(default=None)
     objective: str | None = Field(default=None)
     constraints: str | None = Field(default=None)
