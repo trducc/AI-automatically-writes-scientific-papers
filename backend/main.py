@@ -143,6 +143,32 @@ def _academic_abstract(text: str) -> str:
         return text
     return " ".join(words[:300]).rstrip(".,;:") + "."
 
+
+def _ensure_gap_and_proposal_sections(paper: WriterOutput, plan: PlannerOutput) -> WriterOutput:
+    """Keep the research gap and proposed idea explicit in every generated manuscript."""
+    related_work = paper.related_work.strip()
+    if "research gap" not in related_work.lower():
+        related_work = (
+            "Research Gap. Existing approaches address parts of this problem, but "
+            "they do not jointly resolve the stated task constraints under a matched "
+            "quality-efficiency protocol. This gap motivates the proposed study.\n\n"
+            + related_work
+        )
+
+    methodology = paper.methodology.strip()
+    if "proposed method" not in methodology.lower():
+        methodology = (
+            f"Proposed Method — {plan.proposed_method}. "
+            "The method is a topic-specific research hypothesis that combines the "
+            "identified design components into one testable pipeline. Its expected "
+            "benefits require validation on real data and are not presented as "
+            "measured findings unless the evidence label explicitly says Measured.\n\n"
+            + methodology
+        )
+    paper.related_work = related_work
+    paper.methodology = methodology
+    return paper
+
 _STOP_WORDS = {
     "a", "an", "and", "for", "from", "in", "of", "on", "or", "the", "to", "with",
     "using", "via", "based", "towards", "and", "study", "analysis", "system",
@@ -1028,6 +1054,7 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     research = _build_dynamic_research(plan)
     live_paper = _maybe_live_writer(plan, research, api_key)
     paper = live_paper or _build_synthesis_writer(plan, research)
+    paper = _ensure_gap_and_proposal_sections(paper, plan)
     paper.abstract = _academic_abstract(paper.abstract)
     paper.mathematical_formulas = paper.mathematical_formulas[:4]
     guardrail = GuardrailOutput.model_validate(
