@@ -35,41 +35,34 @@ from backend.guardrail_agent import audit_manuscript
 from academic_sanitizer import sanitize_academic_topic
 
 MASTER_RESEARCH_WRITER_PROMPT = """
-You are a Principal AI Research Scientist writing a full-length, dense academic
-manuscript for a rigorous ICLR/NeurIPS-style review.
+You are a Lead AI Research Scientist drafting a full-length, high-density
+academic paper for ICLR, NeurIPS, or IEEE TPAMI.
 
 TOPIC: "{topic}"
 
-Write at least 2,500 words when the provider budget permits. Use formal,
-precise academic English and do not fill space with generic claims. Every
-major section must contain concrete, topic-specific reasoning and granular
-subsections:
+CORE WRITING REQUIREMENTS:
+1. Write approximately 3,000+ words of specific academic prose when the
+   provider budget permits. Explain structural choices, DRAM/SRAM bandwidth,
+   memory movement, KV-cache footprint, kernel overhead, and empirical
+   behavior. Do not pad with repeated claims or generic praise.
+2. Use academic English and granular subsections:
+   Abstract and Keywords; 1.1-1.3 Introduction; Related Work; 3.1-3.3
+   Methodology; 4.1-4.3 Empirical Evaluation; 5 Discussion and Failure Modes;
+   6 Conclusion and Future Directions; References.
+3. Keep mathematics practical and elegant. Use only 3-4 core equations:
+   baseline representation, gating/routing decision, regularized loss, and
+   optional complexity expression. Define symbols near their first use. Do not
+   create artificial algebraic derivations or fragile LaTeX.
+4. Compare four relevant baseline families and analyze quality, latency,
+   VRAM, FLOPs, and evidence status under a matched protocol. Adapt metrics to
+   the domain; do not force Q/K/V notation on graph, quantum, control, or
+   non-attention topics.
+5. Cite only real, verifiable seminal sources. Never invent authors, DOIs,
+   venues, exact measurements, or 2026 citations. Preserve supplied
+   evidence_type labels and mark simulated values explicitly.
 
-1. Introduction: context and hardware or operational bottlenecks; limitations
-   of current methods; research question; hypothesis; explicit contributions.
-2. Related Work: compare relevant baseline families, including standard
-   attention or backbone methods, grouped/shared computation, efficient
-   kernels or systems, pruning/routing, and quantization when applicable.
-   Do not compare systems that solve a different task merely because they are
-   popular.
-3. Methodology: problem definition and assumptions; architecture; step-by-step
-   mathematical formulation; algorithm/pseudocode; complexity analysis.
-4. Experiments and Comparative Evaluation: datasets, splits, preprocessing,
-   hardware, software, metrics, seeds, main comparison table, and ablations.
-5. Discussion and failure-mode analysis: distribution shift, calibration,
-   resource trade-offs, negative cases, and limitations.
-6. Conclusion and future directions.
-7. References: real and verifiable sources only.
-
-Include block LaTeX for the baseline representation, the proposed gate or
-routing function, the joint objective, and complexity. Define every symbol.
-Never assert O(N log N), a measured value, or a state-of-the-art result unless
-the supplied evidence supports it. Mark every result as Measured, Sourced,
-Controlled Simulation, Estimated, Proposed, or Unresolved. Never invent exact
-floats, citations, authors, venues, or hardware measurements.
-
-Return JSON matching the supplied WriterOutput schema. Put detailed prose in
-the section fields; do not collapse the manuscript into an abstract.
+Return JSON matching WriterOutput exactly. Put detailed prose in section
+fields, not in an unstructured summary.
 """
 
 app = FastAPI(
@@ -113,12 +106,12 @@ def _academic_abstract(text: str) -> str:
         "intended to support transparent follow-up experiments rather than replace them."
     )
     words = text.split()
-    while len(words) < 200:
+    while len(words) < 250:
         text += additions
         words = text.split()
-    if len(words) <= 250:
+    if len(words) <= 300:
         return text
-    return " ".join(words[:250]).rstrip(".,;:") + "."
+    return " ".join(words[:300]).rstrip(".,;:") + "."
 
 _STOP_WORDS = {
     "a", "an", "and", "for", "from", "in", "of", "on", "or", "the", "to", "with",
@@ -731,13 +724,10 @@ def _build_dynamic_writer(plan: PlannerOutput, research: ResearcherOutput) -> Wr
     model_names = ", ".join(model.name for model in research.models_compared)
     ablation_summary = "; ".join(f"{row.configuration}: {row.primary_metric:.2f} ({row.delta_vs_full:+.2f})" for row in research.ablation_study)
     formulas = [
-        r"\mathcal{L}_{total}=\mathcal{L}_{task}+\lambda_1\lVert W\rVert_1+\lambda_2\mathcal{L}_{robust}+\lambda_3\mathcal{L}_{consistency}",
-        r"\alpha_{i}=\frac{\exp(q_i^{\top}k_i/\sqrt{d})}{\sum_{j=1}^{n}\exp(q_i^{\top}k_j/\sqrt{d})},\qquad z_i=\sum_{j=1}^{n}\alpha_{ij}v_j",
-        r"\Delta=\mathrm{Score}_{prop}-\max_{b\in\mathcal{B}}\mathrm{Score}_{b},\qquad G=100\times\frac{\Delta}{\max_{b\in\mathcal{B}}\mathrm{Score}_{b}}",
-        r"\mathrm{Utility}=\frac{\mathrm{Score}}{(1+\lambda_t\,\mathrm{Latency}_{ms})(1+\lambda_p\,\mathrm{Params}_{M})}",
-            r"W_{t+1}=W_t-\eta_t\nabla_W\mathcal{L}_{total}(W_t),\qquad \eta_t=\eta_0\left(1+\frac{t}{T}\right)^{-1/2}",
-            r"\mathrm{MHA}(Q,K,V)=\mathrm{Concat}(H_1,\ldots,H_h)W^O,\qquad H_i=\mathrm{softmax}\left(\frac{QW_i^Q(KW_i^K)^\top}{\sqrt{d_h}}\right)VW_i^V",
-            r"\mathcal{C}(t)=\frac{1}{N}\sum_{n=1}^{N}\left|\ell_n(t)-\ell_n(t-1)\right|,\qquad \text{stop if }\mathcal{C}(t)<\varepsilon\text{ for }p\text{ consecutive epochs}",
+        r"Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V",
+        r"g_h=\sigma\left(W_g\,\operatorname{MeanPool}(X)+U_gq+b_g\right)",
+        r"\mathcal{L}_{total}=\mathcal{L}_{task}+\lambda_s\lVert g\rVert_1+\lambda_c\mathcal{L}_{consistency}",
+        r"\operatorname{Cost}_{dense}=\mathcal{O}(N^2d),\qquad \operatorname{Memory}_{dense}=\mathcal{O}(N^2)",
     ]
     if profile["domain"] == "Quantum Computing":
         formulas[1] = r"|\psi(\theta)\rangle=U(\theta)|0\rangle,\qquad \mathcal{L}_{quantum}=1-\langle\psi(\theta)|H|\psi(\theta)\rangle"
@@ -848,9 +838,8 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
         mathematical_formulas=[
             r"Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V",
             r"g_h=\sigma\left(W_g\,\operatorname{MeanPool}(X)+U_gq+b_g\right)",
-            r"\mathcal{L}_{total}=\mathcal{L}_{task}+\lambda_s\lVert g\rVert_1+\lambda_c\mathcal{L}_{consistency}+\lambda_u\mathcal{L}_{uncertainty}",
+            r"\mathcal{L}_{total}=\mathcal{L}_{task}+\lambda_s\lVert g\rVert_1+\lambda_c\mathcal{L}_{consistency}",
             r"\operatorname{Cost}_{dense}=\mathcal{O}(N^2d),\qquad \operatorname{Memory}_{dense}=\mathcal{O}(N^2)",
-            r"\mathrm{RiskCoverage}(c)=\mathbb{E}[\ell(y,\hat{y})\mid u(x)\leq c]",
         ],
         experimental_results=(
             f"### 4.1 Benchmarks and datasets\nThe demonstration protocol uses an NVIDIA A100 configuration, a fixed training schedule, and the datasets {datasets}. "
@@ -1010,6 +999,7 @@ def _run_pipeline_request(request: PipelineRequest) -> FullPipelineResponse:
     live_paper = _maybe_live_writer(plan, research, api_key)
     paper = live_paper or _build_synthesis_writer(plan, research)
     paper.abstract = _academic_abstract(paper.abstract)
+    paper.mathematical_formulas = paper.mathematical_formulas[:4]
     guardrail = GuardrailOutput.model_validate(
         audit_manuscript(paper.model_dump(), research.model_dump())
     )
