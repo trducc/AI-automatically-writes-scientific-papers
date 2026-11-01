@@ -364,13 +364,35 @@ def _formula_image(formula: str) -> bytes | None:
         return None
 
 
-def _pdf_open_link(pdf: bytes) -> str:
+def _render_pdf_open_button(pdf: bytes) -> None:
     encoded_pdf = base64.b64encode(pdf).decode("ascii")
-    return (
-        '<a class="pdf-open-link" href="data:application/pdf;base64,'
-        f'{encoded_pdf}" target="_blank" rel="noopener noreferrer">'
-        "🔍 Mở PDF ở tab mới</a>"
-    )
+    component_html = f"""
+    <button id="open-pdf" type="button">🔍 Mở PDF ở tab mới</button>
+    <script>
+      const encodedPdf = "{encoded_pdf}";
+      document.getElementById("open-pdf").addEventListener("click", () => {{
+        const binary = atob(encodedPdf);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {{
+          bytes[index] = binary.charCodeAt(index);
+        }}
+        const url = URL.createObjectURL(new Blob([bytes], {{ type: "application/pdf" }}));
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }});
+    </script>
+    <style>
+      body {{ margin: 0; background: transparent; }}
+      #open-pdf {{
+        width: 100%; min-height: 3rem; border: 0; border-radius: .5rem;
+        background: #d95757; color: white; cursor: pointer;
+        font: 800 14px sans-serif;
+      }}
+      #open-pdf:hover {{ background: #ee6c6c; }}
+    </style>
+    """
+    import streamlit.components.v1 as components
+    components.html(component_html, height=48, scrolling=False)
 
 
 def _latex_escape(value: Any) -> str:
@@ -686,7 +708,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
             width="stretch",
         )
     with open_column:
-        st.markdown(_pdf_open_link(pdf), unsafe_allow_html=True)
+        _render_pdf_open_button(pdf)
     st.download_button(
         "📦 Tải toàn bộ artifacts (.ZIP)",
         st.session_state["zip_bytes"],
