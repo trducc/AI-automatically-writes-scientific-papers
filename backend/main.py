@@ -40,34 +40,56 @@ Meta AI) publishing at ICLR, NeurIPS, or IEEE TPAMI.
 
 TOPIC: "{sanitized_topic}"
 
-CORE WRITING PRINCIPLES:
-1. Target approximately 3,000+ words of dense, specific academic prose when
+CORE MANDATE — EXPLICIT PROPOSED IDEA:
+1. Introduce one distinct, topic-appropriate Proposed Method rather than merely
+   summarizing prior work. Give it a concise name and define its mechanism,
+   inputs, outputs, training or inference behavior, and intended trade-off.
+   The idea must be a research hypothesis, not a claim of a published
+   breakthrough. Do not force Transformer, Q/K/V, routing, or gating notation
+   onto topics where it is technically inappropriate.
+2. Make the research gap explicit: identify what the selected baselines do not
+   address, then map each proposed component to that gap. Distinguish genuine
+   novelty in this manuscript from adaptation or synthesis of known techniques.
+   Use cautious language such as "we propose", "we hypothesize", and
+   "requires empirical validation"; never imply that simulated gains are
+   experimentally verified.
+3. Ensure the proposed method is reflected consistently in the title,
+   abstract, Introduction contributions, Methodology, benchmark row, ablation
+   study, Discussion, and Conclusion. Include an ablation that removes or
+   disables the central new component.
+
+WRITING AND EVIDENCE PRINCIPLES:
+4. Target approximately 3,000+ words of dense, specific academic prose when
    the provider budget permits. Explain structural choices, DRAM/SRAM
    bandwidth, KV-cache or document-context memory, multimodal token
    alignment, memory movement, kernel overhead, and empirical behavior.
    Never pad with repeated claims or generic praise.
-2. Write in formal academic English with these sections and subsections:
+5. Write in formal academic English with these sections and subsections:
    Abstract and Keywords; 1.1 Context and bottleneck; 1.2 limitations of
    current methods; 1.3 contributions; 2.1-2.3 Related Work and research gap;
    3.1 architecture and preprocessing; 3.2 streamlined formulations; 3.3
    retrieval/context or inference optimization; 4.1 setup and hardware; 4.2
    comparative evaluation; 4.3 ablations; 5 discussion and failure modes;
    6 conclusion and future directions; References.
-3. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
+6. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
    a gating/routing rule, a joint regularized loss, and optionally one
    complexity expression. Define symbols near first use. Replace algebra
    walls with data-flow descriptions, pseudocode, and implementation logic.
-4. Compare four relevant baseline families under a matched protocol. For
+7. Compare four relevant baseline families under a matched protocol. For
    document/PDF/RAG topics, discuss text-only RAG, naive PDF parsing,
    chunking-only pipelines, and static multimodal encoders; report latency,
    VRAM, retrieval Precision/Recall@K, non-text table/image retrieval, and
    Accuracy@0.85, Accuracy@0.90, and Accuracy@0.95 when those metrics apply.
    For other domains, adapt the metrics instead of forcing PDF-RAG terminology
    or Q/K/V notation.
-5. Cite only real, verifiable seminal sources. RAG, document-layout,
+8. Use the supplied benchmark rows and preserve every evidence_type label.
+   Literature Baseline values are references, Controlled Simulation values are
+   planning estimates, and Measured values require actual execution evidence.
+   Never invent exact measurements, datasets, authors, DOIs, venues, or
+   future papers. Do not convert a planned or simulated improvement into a
+   measured result.
+9. Cite only real, verifiable seminal sources. RAG, document-layout,
    multimodal, and PDF-processing citations must be checked before use.
-   Never invent authors, DOIs, venues, exact measurements, or future papers.
-   Preserve supplied evidence_type labels and mark simulations explicitly.
 
 Return JSON matching WriterOutput exactly. Put detailed prose in section
 fields, not in an unstructured summary.
