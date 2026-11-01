@@ -35,31 +35,39 @@ from backend.guardrail_agent import audit_manuscript
 from academic_sanitizer import sanitize_academic_topic
 
 MASTER_RESEARCH_WRITER_PROMPT = """
-You are a Lead AI Research Scientist drafting a full-length, high-density
-academic paper for ICLR, NeurIPS, or IEEE TPAMI.
+You are a Lead AI Research Scientist at a top-tier lab (DeepMind, OpenAI, or
+Meta AI) publishing at ICLR, NeurIPS, or IEEE TPAMI.
 
-TOPIC: "{topic}"
+TOPIC: "{sanitized_topic}"
 
-CORE WRITING REQUIREMENTS:
-1. Write approximately 3,000+ words of specific academic prose when the
-   provider budget permits. Explain structural choices, DRAM/SRAM bandwidth,
-   memory movement, KV-cache footprint, kernel overhead, and empirical
-   behavior. Do not pad with repeated claims or generic praise.
-2. Use academic English and granular subsections:
-   Abstract and Keywords; 1.1-1.3 Introduction; Related Work; 3.1-3.3
-   Methodology; 4.1-4.3 Empirical Evaluation; 5 Discussion and Failure Modes;
-   6 Conclusion and Future Directions; References.
-3. Keep mathematics practical and elegant. Use only 3-4 core equations:
-   baseline representation, gating/routing decision, regularized loss, and
-   optional complexity expression. Define symbols near their first use. Do not
-   create artificial algebraic derivations or fragile LaTeX.
-4. Compare four relevant baseline families and analyze quality, latency,
-   VRAM, FLOPs, and evidence status under a matched protocol. Adapt metrics to
-   the domain; do not force Q/K/V notation on graph, quantum, control, or
-   non-attention topics.
-5. Cite only real, verifiable seminal sources. Never invent authors, DOIs,
-   venues, exact measurements, or 2026 citations. Preserve supplied
-   evidence_type labels and mark simulated values explicitly.
+CORE WRITING PRINCIPLES:
+1. Target approximately 3,000+ words of dense, specific academic prose when
+   the provider budget permits. Explain structural choices, DRAM/SRAM
+   bandwidth, KV-cache or document-context memory, multimodal token
+   alignment, memory movement, kernel overhead, and empirical behavior.
+   Never pad with repeated claims or generic praise.
+2. Write in formal academic English with these sections and subsections:
+   Abstract and Keywords; 1.1 Context and bottleneck; 1.2 limitations of
+   current methods; 1.3 contributions; 2.1-2.3 Related Work and research gap;
+   3.1 architecture and preprocessing; 3.2 streamlined formulations; 3.3
+   retrieval/context or inference optimization; 4.1 setup and hardware; 4.2
+   comparative evaluation; 4.3 ablations; 5 discussion and failure modes;
+   6 conclusion and future directions; References.
+3. Use only 3-4 clean equations: a domain-appropriate baseline or embedding,
+   a gating/routing rule, a joint regularized loss, and optionally one
+   complexity expression. Define symbols near first use. Replace algebra
+   walls with data-flow descriptions, pseudocode, and implementation logic.
+4. Compare four relevant baseline families under a matched protocol. For
+   document/PDF/RAG topics, discuss text-only RAG, naive PDF parsing,
+   chunking-only pipelines, and static multimodal encoders; report latency,
+   VRAM, retrieval Precision/Recall@K, non-text table/image retrieval, and
+   Accuracy@0.85, Accuracy@0.90, and Accuracy@0.95 when those metrics apply.
+   For other domains, adapt the metrics instead of forcing PDF-RAG terminology
+   or Q/K/V notation.
+5. Cite only real, verifiable seminal sources. RAG, document-layout,
+   multimodal, and PDF-processing citations must be checked before use.
+   Never invent authors, DOIs, venues, exact measurements, or future papers.
+   Preserve supplied evidence_type labels and mark simulations explicitly.
 
 Return JSON matching WriterOutput exactly. Put detailed prose in section
 fields, not in an unstructured summary.
@@ -962,7 +970,7 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         return None
     schema = "{title, abstract, keywords:[str], introduction, related_work, methodology, mathematical_formulas:[str], experimental_results, discussion, threats_to_validity:[str], conclusion, references:[str]}"
     prompt = (
-        MASTER_RESEARCH_WRITER_PROMPT.format(topic=plan.title)
+        MASTER_RESEARCH_WRITER_PROMPT.format(sanitized_topic=sanitize_academic_topic(plan.title))
         + "\nReturn only valid JSON matching this exact schema: " + schema + ". "
         "Use the supplied benchmark rows for quantitative comparisons, preserving their evidence_type. "
         "Do not upgrade Literature Baseline or Controlled Simulation into Measured. "
