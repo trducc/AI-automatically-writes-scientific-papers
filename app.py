@@ -56,6 +56,13 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .stDownloadButton>button:hover,.stButton>button:hover{background:#17304d!important;border-color:var(--cyan)!important;color:#f8fbff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
 .block-container{width:min(100% - 2rem,1540px);max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:clamp(1.2rem,3vw,2rem) clamp(1.1rem,3vw,2.3rem);margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .55rem;font-size:clamp(1.55rem,3.4vw,2.35rem);line-height:1.12;overflow-wrap:anywhere;word-break:normal}.hero p{color:#b9c8e2!important;margin:0;line-height:1.45}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003;overflow-wrap:anywhere}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem;overflow-wrap:anywhere}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-width:0}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:normal!important;text-align:center;min-height:2.5rem}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
+.stDataFrame,.stTable{width:100%;max-width:100%;overflow-x:auto;border-radius:12px}
+[data-testid="stDataFrame"]{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+[data-testid="stExpander"]{border:1px solid var(--line);border-radius:12px;background:rgba(17,27,48,.48)}
+.artifact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
+.artifact-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;min-width:0;overflow-wrap:anywhere}
+.artifact-card strong{color:#f8fbff!important}.artifact-card small{color:var(--muted)!important}
+@media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.45rem .55rem}.glass-card{min-height:0}.architecture-flow{padding:.8rem}.dataset-command{font-size:.8rem}}
 </style>
 <style>
 [data-testid="stMetric"]{min-width:0!important}
@@ -585,13 +592,7 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
 
 
 def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
-    export_research = {
-        **research,
-        "models_compared": [item for item in research.get("models_compared", []) if item.get("role") == "Proposed"],
-        "benchmark_table": [item for item in research.get("benchmark_table", []) if item.get("role") == "Proposed"],
-    }
-    pdf = pdf_report(paper, export_research)
-    zip_bytes, artifact_dir = persist_artifacts(paper, export_research, pdf)
+    pdf = st.session_state["pdf_bytes"]
     metadata = research.get("project_metadata") or {}
     st.markdown(
         f"<section class='hero'><h1>{escape(paper['title'])}</h1>"
@@ -627,7 +628,7 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     )
     st.download_button(
         "📦 Download All Artifacts (.ZIP)",
-        zip_bytes,
+        st.session_state["zip_bytes"],
         "research_artifacts.zip",
         "application/zip",
         width="stretch",
@@ -671,6 +672,36 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         st.markdown(f"<div class='callout'><strong>Research Assistant</strong><br>{escape(answer)}</div>", unsafe_allow_html=True)
 
 
+def render_artifacts() -> None:
+    artifact_dir = Path(st.session_state["artifact_dir"])
+    st.subheader("📦 Artifact vault")
+    st.caption("Các tệp đã được giữ trong session state; chuyển tab hoặc tải xuống không làm mất kết quả.")
+    files = [
+        ("📄 PDF", "pdf_bytes", "application/pdf", "research_paper.pdf"),
+        ("🧾 LaTeX", "tex_bytes", "text/plain", "paper.tex"),
+        ("📊 Benchmark JSON", "benchmark_bytes", "application/json", "benchmark_matrix.json"),
+        ("🛡️ Guardrail report", "guardrail_bytes", "application/json", "guardrail_report.json"),
+        ("📦 ZIP", "zip_bytes", "application/zip", "research_artifacts.zip"),
+    ]
+    cards = st.columns(3)
+    for index, (label, state_key, mime, filename) in enumerate(files):
+        with cards[index % len(cards)]:
+            st.markdown(
+                f"<article class='artifact-card'><strong>{label}</strong><br><small>{filename}</small></article>",
+                unsafe_allow_html=True,
+            )
+            st.download_button(
+                f"Download {filename}",
+                st.session_state[state_key],
+                filename,
+                mime,
+                key=f"download_{state_key}",
+                width="stretch",
+            )
+    st.divider()
+    st.caption(f"Generated artifact folder: {artifact_dir.name}")
+
+
 def render_review(review: dict[str, Any]) -> None:
     metrics = st.columns(4)
     for column, label, key in zip(metrics, ("Novelty","Technical Rigor","Clarity","Overall Score"), ("novelty_score","rigor_score","clarity_score","overall_score")):
@@ -688,6 +719,19 @@ def main() -> None:
     first = next(iter(PRESETS))
     for key, value in {"topic":first, **PRESETS[first]}.items():
         st.session_state.setdefault(key, value)
+    for key, value in {
+        "full_pipeline_result": None,
+        "full_paper_text": "",
+        "pdf_file_path": "",
+        "benchmark_data": [],
+        "pdf_bytes": b"",
+        "tex_bytes": b"",
+        "benchmark_bytes": b"",
+        "guardrail_bytes": b"",
+        "zip_bytes": b"",
+        "artifact_dir": "",
+    }.items():
+        st.session_state.setdefault(key, value)
     with st.sidebar:
         st.markdown("## Research Control Room")
         st.selectbox("⚡ Quick Demo Presets", [*PRESETS, CUSTOM], key="preset", on_change=apply_preset)
@@ -696,17 +740,9 @@ def main() -> None:
         st.text_input("Primary Objective", key="objective")
         st.text_area("Constraints", key="constraints", height=75)
         run_clicked = st.button("🚀 Run Autonomous Research Pipeline", type="primary", width="stretch")
-    if run_clicked or "full_pipeline_result" not in st.session_state:
+    if run_clicked or not st.session_state["full_pipeline_result"]:
         with st.status("🤖 Orchestrating Enterprise Multi-Agent Research Lab...", expanded=True) as status:
-            execution_log = [
-                ("🟢 [Planner Agent]", "Extracting domain keywords, defining the hypothesis, and building the task decomposition...", 0.45),
-                ("🟢 [Researcher Agent]", "Building the benchmark matrix, convergence curves, datasets, and model catalog...", 0.65),
-                ("🟢 [Writer Agent]", "Composing the IEEE-style manuscript with equations, ablations, and references...", 0.55),
-                ("🟢 [Reviewer Agent]", "Scoring novelty, technical rigor, clarity, evidence, and reproducibility...", 0.5),
-            ]
-            for agent, message, duration in execution_log:
-                st.write(f"{agent} {message}")
-                time.sleep(duration)
+            status.write("⏳ Đang khởi tạo Planner Agent và phân loại chủ đề...")
             result = run_pipeline(st.session_state.topic, st.session_state.domain, st.session_state.objective, st.session_state.constraints)
             if not result:
                 status.update(label="Pipeline unavailable", state="error")
@@ -715,7 +751,23 @@ def main() -> None:
                 status.update(label="Request rejected", state="error", expanded=True)
                 st.error(result["error"])
                 st.stop()
+            status.write("✍️ Writer Agent đã hoàn tất bản thảo học thuật...")
+            status.write("🛡️ Guardrail đang kiểm tra công thức, benchmark và evidence labels...")
+            status.write("📄 Đang biên dịch PDF và đóng gói artifacts...")
+            export_research = result["research"]
+            paper = result["paper"]
+            pdf = pdf_report(paper, export_research)
+            zip_bytes, artifact_dir = persist_artifacts(paper, export_research, pdf)
             st.session_state.full_pipeline_result = result
+            st.session_state.full_paper_text = paper_markdown(paper, export_research)
+            st.session_state.pdf_bytes = pdf
+            st.session_state.zip_bytes = zip_bytes
+            st.session_state.artifact_dir = str(artifact_dir)
+            st.session_state.pdf_file_path = str(artifact_dir / "paper.pdf")
+            st.session_state.benchmark_data = export_research.get("benchmark_table", [])
+            st.session_state.tex_bytes = (artifact_dir / "paper.tex").read_bytes()
+            st.session_state.benchmark_bytes = (artifact_dir / "benchmark_matrix.json").read_bytes()
+            st.session_state.guardrail_bytes = (artifact_dir / "guardrail_report.json").read_bytes()
             status.update(label="✅ Pipeline completed · manuscript ready", state="complete", expanded=False)
     result = st.session_state["full_pipeline_result"]
     if result.get("paper_mode") == "dynamic_fallback" and result.get("mode_used") == "live_gemini":
@@ -726,13 +778,23 @@ def main() -> None:
         st.success("Live planner and writer are enabled with Gemini. Benchmark values still require validation with instrumented experiments before publication.")
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
-    tabs = st.tabs(["📄 PDF Preview","🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","🗃️ Verified Datasets","📐 Architecture & Mathematical Formulation","⚖️ Peer Review & Rubric"])
-    with tabs[0]: render_paper(paper, research)
-    with tabs[1]: render_plan(plan)
-    with tabs[2]: render_benchmarks(research)
-    with tabs[3]: render_verified_datasets()
-    with tabs[4]: render_method(plan, paper)
-    with tabs[5]: render_review(review)
+    tabs = st.tabs([
+        "⚙️ Cấu hình Chủ đề & Tham số",
+        "📄 Xem trước Bản thảo",
+        "📊 Benchmark & Biểu đồ",
+        "📦 Artifacts & Tải xuống",
+    ])
+    with tabs[0]:
+        render_plan(plan)
+        render_method(plan, paper)
+        render_verified_datasets()
+        render_review(review)
+    with tabs[1]:
+        render_paper(paper, research)
+    with tabs[2]:
+        render_benchmarks(research)
+    with tabs[3]:
+        render_artifacts()
 
 
 if __name__ == "__main__":

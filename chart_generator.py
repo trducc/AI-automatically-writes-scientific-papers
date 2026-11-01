@@ -18,6 +18,10 @@ def generate_research_charts(
     created: list[Path] = []
 
     if not rows.empty:
+        for column in ("latency_ms", "vram_mb"):
+            if column not in rows:
+                rows[column] = 0.0
+            rows[column] = pd.to_numeric(rows[column], errors="coerce").fillna(0)
         labels = rows["model_name"].astype(str).tolist()
         figure, axes = plt.subplots(1, 2, figsize=(11, 4.8), constrained_layout=True)
         axes[0].bar(labels, rows["latency_ms"], color="#2563eb")
