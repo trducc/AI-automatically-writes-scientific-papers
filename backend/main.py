@@ -31,6 +31,44 @@ from backend.schemas import (
     WriterOutput,
 )
 
+MASTER_RESEARCH_WRITER_PROMPT = """
+You are a Principal AI Research Scientist writing a full-length, dense academic
+manuscript for a rigorous ICLR/NeurIPS-style review.
+
+TOPIC: "{topic}"
+
+Write at least 2,500 words when the provider budget permits. Use formal,
+precise academic English and do not fill space with generic claims. Every
+major section must contain concrete, topic-specific reasoning and granular
+subsections:
+
+1. Introduction: context and hardware or operational bottlenecks; limitations
+   of current methods; research question; hypothesis; explicit contributions.
+2. Related Work: compare relevant baseline families, including standard
+   attention or backbone methods, grouped/shared computation, efficient
+   kernels or systems, pruning/routing, and quantization when applicable.
+   Do not compare systems that solve a different task merely because they are
+   popular.
+3. Methodology: problem definition and assumptions; architecture; step-by-step
+   mathematical formulation; algorithm/pseudocode; complexity analysis.
+4. Experiments and Comparative Evaluation: datasets, splits, preprocessing,
+   hardware, software, metrics, seeds, main comparison table, and ablations.
+5. Discussion and failure-mode analysis: distribution shift, calibration,
+   resource trade-offs, negative cases, and limitations.
+6. Conclusion and future directions.
+7. References: real and verifiable sources only.
+
+Include block LaTeX for the baseline representation, the proposed gate or
+routing function, the joint objective, and complexity. Define every symbol.
+Never assert O(N log N), a measured value, or a state-of-the-art result unless
+the supplied evidence supports it. Mark every result as Measured, Sourced,
+Controlled Simulation, Estimated, Proposed, or Unresolved. Never invent exact
+floats, citations, authors, venues, or hardware measurements.
+
+Return JSON matching the supplied WriterOutput schema. Put detailed prose in
+the section fields; do not collapse the manuscript into an abstract.
+"""
+
 app = FastAPI(
     title="Smart Research Lab API",
     version="0.2.0",
@@ -622,6 +660,9 @@ def _build_dynamic_research(plan: PlannerOutput) -> ResearcherOutput:
             latency_ms=model.latency_ms,
             params_m=model.params_m,
             notes="Best simulated quality-efficiency tradeoff for the target topic." if model.role == "Proposed" else "Reference configuration in the generated benchmark.",
+            vram_mb=round(model.params_m * (34 if model.role == "Proposed" else 90), 1),
+            flops_g=model.flops_g,
+            evidence_type="Controlled Simulation" if model.role == "Proposed" else "Literature Baseline / Planned",
         )
         for model in plan.models_catalog
     ]
@@ -752,40 +793,62 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
         ),
         keywords=[plan.domain.lower(), "task-aware learning", "uncertainty", "efficient AI", "reproducible research"],
         introduction=(
-            f"{topic} has become an important research direction because modern AI systems must remain reliable when inputs, tasks, and operating conditions change. "
-            f"Recent 2026 work has emphasized multimodal scientific models, autonomous reasoning, and resource-aware learning. "
-            f"This paper asks: {plan.research_question} "
-            "The objective is not to reproduce an existing paper or rank a collection of systems, but to turn a current research direction into a precise, independently testable method.\n\n"
-            "The contributions are threefold. First, we define an adaptive evidence-selection mechanism for the target task. "
-            "Second, we introduce a joint objective that couples task quality, sparsity, and consistency. "
-            "Third, we provide a reproducible evaluation protocol that reports uncertainty, failure modes, and resource use without presenting simulated values as measured facts."
+            f"### 1.1 Context and operational bottlenecks\n{topic} matters because deployed AI systems must preserve quality under finite memory, bandwidth, latency, and energy budgets. "
+            f"The central question is: {plan.research_question} Modern accelerators expose a gap between nominal FLOPs and observed wall-clock behavior: memory movement, kernel launch overhead, sequence length, and batch-size sensitivity can dominate arithmetic cost.\n\n"
+            "### 1.2 Limitations of current methods\nExisting systems often optimize task quality in isolation, report a single hardware configuration, or use static reduction rules that fail under distribution shift. "
+            "Comparisons are also difficult when tokenization, precision, warm-up, and measurement protocol differ. A fair study must therefore compare the proposed method with strong baseline families under a shared budget rather than treating a lower simulated number as a measured improvement.\n\n"
+            "### 1.3 Contributions\n"
+            "1. We define an adaptive evidence-selection mechanism for the target task.\n"
+            "2. We formulate a joint objective coupling task quality, sparsity, and consistency.\n"
+            "3. We specify a reproducible multi-seed protocol with latency, memory, FLOPs, and uncertainty reporting.\n"
+            "4. We separate literature baselines, controlled simulations, and future measurements so that claims remain auditable."
         ),
         related_work=(
-            "Recent research in this area is moving toward foundation models that combine modalities, reasoning processes, and domain constraints. "
-            "The open problem is how to make such systems selective and auditable when the input distribution changes. "
-            "The proposed study addresses this gap by treating evidence selection, uncertainty, and computational budget as parts of one method rather than as separate post-processing steps. "
-            "The 2026 inspiration sources listed in the references motivate the research direction; they are not used as hidden performance claims."
+            "### 2.1 Dense attention and standard backbones\nDense multi-head attention remains the reference because every head processes every eligible token. It is predictable and expressive, but its quadratic interaction pattern can become a memory-bandwidth bottleneck.\n\n"
+            "### 2.2 Grouped or shared-query computation\nGQA and related sharing strategies reduce key-value storage and improve serving efficiency, but they impose a fixed sharing pattern. They are strong comparators when the task benefits from regular memory access.\n\n"
+            "### 2.3 Kernel and systems optimization\nFlashAttention-style kernels reduce materialized intermediate memory and improve locality without changing the model's statistical objective. They are complementary to, rather than automatically interchangeable with, a learned routing mechanism.\n\n"
+            "### 2.4 Pruning, routing, and quantization\nStatic pruning and quantization can reduce cost, but aggressive reduction may remove information needed for rare inputs. The proposed study combines adaptive selection with explicit consistency and calibration checks. Baseline comparisons must use the same task, sequence length, precision, and measurement protocol."
         ),
         methodology=(
-            f"{proposed.name} uses {proposed.backbone.lower()} with a task-aware routing unit. "
-            "The router estimates the relevance of each input component, applies a differentiable gate, and propagates an uncertainty summary alongside the task representation. "
-            "Training uses the task objective, a sparsity penalty, and a consistency term across perturbed views. "
-            f"The proposed system is evaluated on {datasets} using a fixed data split, multiple random seeds, calibration analysis, and hardware profiling."
+            f"### 3.1 Problem definition and assumptions\n{proposed.name} uses {proposed.backbone.lower()} with a task-aware routing unit. Let X be the input representation, h_i the representation of component i, and q the task context. The router estimates relevance without assuming that every input component contributes equally.\n\n"
+            "### 3.2 Mathematical formulation\nThe baseline attention projections are defined as\n"
+            "$$Q=XW_Q,\\qquad K=XW_K,\\qquad V=XW_V.$$ \n"
+            "For head h, the proposed gate is\n"
+            "$$g_h=\\sigma(W_g\\,\\mathrm{MeanPool}(X)+U_g q+b_g),\\qquad 0\\leq g_h\\leq1.$$ \n"
+            "The gated representation is \(Z=\\sum_i g_i h_i\), with a residual path retained for stability. The joint training objective is\n"
+            "$$L_{total}=L_{task}+\\lambda_s\\lVert g\\rVert_1+\\lambda_cL_{consistency}+\\lambda_uL_{uncertainty}.$$ \n"
+            "Here \(L_{task}\) measures the target objective, \(L_{consistency}\) compares clean and perturbed views, and \(L_{uncertainty}\) penalizes miscalibration.\n\n"
+            "### 3.3 Algorithm and complexity\n"
+            "The forward pass is: (1) encode inputs; (2) pool contextual features; (3) compute gates; (4) retain or down-weight components; (5) execute the task head; (6) emit prediction and uncertainty. "
+            "A dense implementation remains O(N^2) in attention interactions. A pruned implementation may reduce active interactions, but the exact bound depends on the selection algorithm; therefore this paper reports measured FLOPs and memory rather than claiming O(N log N) without proof. "
+            f"The protocol evaluates the mechanism on {datasets} with fixed splits, multiple seeds, calibration analysis, and hardware profiling."
         ),
         mathematical_formulas=[
-            r"\mathcal{L}=\mathcal{L}_{task}+\lambda_s\lVert g\rVert_1+\lambda_c\mathcal{L}_{consistency}+\lambda_u\mathcal{L}_{uncertainty}",
-            r"g_i=\sigma\left(f_{\theta}(x_i,q)\right),\qquad z=\sum_{i=1}^{n}g_i h_i",
+            r"Q=XW_Q,\qquad K=XW_K,\qquad V=XW_V",
+            r"g_h=\sigma\left(W_g\,\operatorname{MeanPool}(X)+U_gq+b_g\right)",
+            r"\mathcal{L}_{total}=\mathcal{L}_{task}+\lambda_s\lVert g\rVert_1+\lambda_c\mathcal{L}_{consistency}+\lambda_u\mathcal{L}_{uncertainty}",
+            r"\operatorname{Cost}_{dense}=\mathcal{O}(N^2d),\qquad \operatorname{Memory}_{dense}=\mathcal{O}(N^2)",
             r"\mathrm{RiskCoverage}(c)=\mathbb{E}[\ell(y,\hat{y})\mid u(x)\leq c]",
         ],
         experimental_results=(
-            f"The demonstration protocol uses an NVIDIA A100 configuration, a fixed training schedule, and the datasets {datasets}. "
-            f"The primary metric is {metric}; secondary measurements include calibration error, robustness under controlled perturbations, parameter count, and latency. "
-            "The displayed curves and tables are planning estimates generated to make the experiment executable. A publication-ready result requires instrumented runs, confidence intervals, and an explicit error taxonomy."
+            f"### 4.1 Benchmarks and datasets\nThe demonstration protocol uses an NVIDIA A100 configuration, a fixed training schedule, and the datasets {datasets}. "
+            f"The primary metric is {metric}; secondary measurements include calibration error, robustness under controlled perturbations, parameter count, FLOPs, VRAM footprint, and latency. "
+            "Each dataset requires a declared split, preprocessing recipe, license, and leakage check.\n\n"
+            "### 4.2 Main comparative evaluation\nThe benchmark matrix compares standard attention/backbone systems, efficient shared-computation systems, pruning or routing methods, and the proposed configuration. "
+            "The comparison table must report the primary metric direction, latency per token or example, peak VRAM in MB, FLOPs in G, and evidence type. "
+            "The displayed values are planning estimates generated to make the experiment executable; they are not measured results.\n\n"
+            "### 4.3 Ablation study\nThe study removes the sparsity term, dynamic router, and uncertainty term independently. A valid ablation keeps data, optimizer, budget, and evaluation code fixed. "
+            "The expected output is a matrix of mean, standard deviation, confidence interval, and evidence status rather than a single favorable run.\n\n"
+            "### 4.4 Statistical protocol\nRun at least three independent seeds, report paired differences and 95% confidence intervals, and preserve raw logs. "
+            "A result is inconclusive when intervals overlap materially or when the effect disappears under a matched hardware budget."
         ),
         discussion=(
-            "The expected benefit is a model whose computation follows task-relevant evidence instead of processing every input component uniformly. "
-            "This can improve interpretability and reduce unnecessary computation, but the mechanism may fail when relevance signals are poorly calibrated or when the deployment distribution differs from the development data. "
-            "The proposed ablations therefore remove routing, sparsity, and consistency components one at a time to identify which design choices are necessary."
+            "### 5.1 Trade-offs\nThe expected benefit is a model whose computation follows task-relevant evidence instead of processing every input component uniformly. "
+            "This can reduce active work, but gate computation, irregular memory access, and synchronization can offset theoretical savings on some accelerators.\n\n"
+            "### 5.2 Failure modes\nThe mechanism may fail when relevance signals are poorly calibrated, when rare evidence is pruned, or when deployment distribution differs from development data. "
+            "A safe system must expose abstention, uncertainty, and worst-group error rather than optimize only the average score.\n\n"
+            "### 5.3 Future work\nFuture studies should compare optimized kernels, quantization levels, and serving stacks under identical batch and precision settings. "
+            "They should also test multilingual, long-context, and adversarial inputs and publish code, logs, seeds, and environment manifests."
         ),
         threats_to_validity=[
             "Dataset coverage may not represent the full deployment distribution.",
@@ -793,15 +856,20 @@ def _build_synthesis_writer(plan: PlannerOutput, research: ResearcherOutput) -> 
             "Calibration quality can vary across domains, hardware, and input corruption types.",
         ],
         conclusion=(
-            f"This paper presented {proposed.name} for {topic}. The contribution is a self-contained research hypothesis with a formal objective, "
-            "an uncertainty-aware architecture, and a reproducible evaluation plan. The next step is to execute the protocol on the named datasets, "
-            "release configuration files, and report confidence intervals before making claims about scientific or deployment impact."
+            f"### 6. Conclusion and future directions\nThis paper presented {proposed.name} for {topic}. "
+            "The contribution is a self-contained research hypothesis with a formal objective, an uncertainty-aware architecture, a multi-dimensional benchmark, and a reproducible evaluation plan. "
+            "The current numerical values are controlled planning simulations and must not be interpreted as completed experiments. "
+            "The next step is to execute the protocol on the named datasets, release configuration files and raw logs, report confidence intervals, and test the method across hardware and distribution shifts before making claims about scientific or deployment impact."
         ),
         references=[
-            "Nature Machine Intelligence (2026), Articles in 2026, https://www.nature.com/natmachintell/articles?year=2026",
-            "AAAI (2026), Proceedings of the Fortieth AAAI Conference on Artificial Intelligence, https://aaai.org/proceeding/aaai-40-2026/",
-            "ACL (2026), Accepted Main Conference Papers, https://2026.aclweb.org/program/accepted_papers/",
-            "IJCAI-ECAI (2026), Accepted Papers, https://2026.ijcai.org/accepted-papers/",
+            "Vaswani, A., et al. (2017). Attention Is All You Need. NeurIPS. https://arxiv.org/abs/1706.03762",
+            "Ainslie, J., et al. (2023). GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints. EMNLP. https://arxiv.org/abs/2305.13245",
+            "Dao, T., et al. (2022). FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness. NeurIPS. https://arxiv.org/abs/2205.14135",
+            "Dao, T. (2023). FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning. ICLR. https://arxiv.org/abs/2307.08691",
+            "Sanh, V., et al. (2020). Movement Pruning: Adaptive Sparsity by Fine-Tuning. NeurIPS. https://arxiv.org/abs/2005.07683",
+            "Dettmers, T., et al. (2022). LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale. NeurIPS. https://arxiv.org/abs/2208.07339",
+            "Leviathan, Y., Kalman, M., and Matias, Y. (2023). Fast Inference from Transformers via Speculative Decoding. ICML. https://arxiv.org/abs/2211.17192",
+            "Dodge, J., et al. (2019). Show Your Work: Improved Reporting of Experimental Results. EMNLP. https://aclanthology.org/D19-1224/",
         ],
     )
 
@@ -883,15 +951,10 @@ def _maybe_live_writer(plan: PlannerOutput, research: ResearcherOutput, api_key:
         return None
     schema = "{title, abstract, keywords:[str], introduction, related_work, methodology, mathematical_formulas:[str], experimental_results, discussion, threats_to_validity:[str], conclusion, references:[str]}"
     prompt = (
-        "Return only valid JSON matching this exact schema: " + schema + ". "
-        "Write a formal IEEE/NeurIPS-inspired manuscript in objective scientific English. "
-        "Abstract must contain Context, Problem Gap, Proposed Expert Method, Quantitative Results, and Broader Impact. "
-        "Introduction must state exactly three methodological contributions. Related Work must synthesize the research gap without presenting a baseline leaderboard. "
-        "Methodology must include domain-correct LaTeX equations for input representation, "
-        "routing or attention/gating, and a joint loss combining task, sparsity, and consistency terms. "
-        "Experimental Results must name the A100 hardware, schedule, datasets, parameters, latency, and ablation study. "
-        "Threats to Validity must address dataset bias, distribution shift, and hardware bounds. "
-        "Tie every performance claim to named datasets and the proposed method. Never describe planning estimates as measured facts and do not compare against baselines. "
+        MASTER_RESEARCH_WRITER_PROMPT.format(topic=plan.title)
+        + "\nReturn only valid JSON matching this exact schema: " + schema + ". "
+        "Use the supplied benchmark rows for quantitative comparisons, preserving their evidence_type. "
+        "Do not upgrade Literature Baseline or Controlled Simulation into Measured. "
         f"Topic: {plan.title}. Domain: {plan.domain}. Research question: {plan.research_question}. "
         f"Models: {json.dumps([item.model_dump() for item in plan.models_catalog])}. "
         f"Datasets: {json.dumps([item.model_dump() for item in research.datasets_used])}. "

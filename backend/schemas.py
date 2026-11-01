@@ -68,6 +68,8 @@ class ModelSpec(BaseModel):
     flops_g: float = Field(..., ge=0.0, description="Floating point operations in GFLOPs")
     latency_ms: float = Field(..., ge=0.0, description="Inference latency in milliseconds")
     key_characteristic: str = Field(..., description="Technical characteristic")
+    vram_mb: float = Field(default=0.0, ge=0.0, description="Peak VRAM footprint in MB when available")
+    evidence_type: str = Field(default="Planned / Unverified", description="Measured, Literature Baseline, Controlled Simulation, or Planned")
 
 
 class PlannerOutput(BaseModel):
@@ -106,6 +108,9 @@ class AblationRow(BaseModel):
     latency_ms: float = Field(..., ge=0.0)
     params_m: float = Field(..., ge=0.0)
     notes: str = Field(..., description="Interpretation of the result")
+    vram_mb: float = Field(default=0.0, ge=0.0)
+    flops_g: float = Field(default=0.0, ge=0.0)
+    evidence_type: str = Field(default="Planned / Unverified")
 
 
 class ResearcherOutput(BaseModel):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import re
 import time
 import unicodedata
@@ -14,6 +15,7 @@ from typing import Any
 import pandas as pd
 import requests
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 
 try:
     import plotly.express as px
@@ -50,7 +52,7 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .stDownloadButton>button,.stButton>button{background:#101a2d!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-radius:10px;font-weight:700;white-space:normal;line-height:1.2;min-height:3rem}
 .stDownloadButton>button:hover,.stButton>button:hover{background:#17304d!important;border-color:var(--cyan)!important;color:#f8fbff!important}
 [data-testid="stSidebar"]{background:rgba(7,13,25,.96);border-right:1px solid var(--line)}
-.block-container{max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:2rem 2.3rem;margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .35rem;font-size:2.35rem}.hero p{color:#b9c8e2!important;margin:0}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
+.block-container{width:min(100% - 2rem,1540px);max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:clamp(1.2rem,3vw,2rem) clamp(1.1rem,3vw,2.3rem);margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .55rem;font-size:clamp(1.55rem,3.4vw,2.35rem);line-height:1.12;overflow-wrap:anywhere;word-break:normal}.hero p{color:#b9c8e2!important;margin:0;line-height:1.45}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003;overflow-wrap:anywhere}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem;overflow-wrap:anywhere}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-width:0}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:normal!important;text-align:center;min-height:2.5rem}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
 </style>
 <style>
 [data-testid="stMetric"]{min-width:0!important}
@@ -66,6 +68,9 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .dataset-command .flag-command{color:#f59e0b!important}
 .architecture-code{background:#101a2d;border:1px solid rgba(135,160,202,.35);border-radius:12px;padding:1.2rem 1.35rem;margin-top:.55rem;overflow-x:auto}
 .architecture-code pre{margin:0;background:transparent!important;color:#e8eefc!important;font-family:Consolas,"Courier New",monospace;font-size:.95rem;line-height:1.55;white-space:pre}
+.pdf-preview{background:#f4f6fa;border:1px solid rgba(135,160,202,.3);border-radius:16px;padding:.6rem;overflow:hidden}
+[data-testid="stSidebar"]{min-width:18rem;max-width:22rem}
+@media (max-width: 760px){.block-container{width:calc(100% - 1rem);padding-left:.5rem;padding-right:.5rem}.hero h1{font-size:1.5rem}.stTabs [data-baseweb="tab"]{font-size:.78rem;padding:.35rem}.architecture-flow{gap:.35rem}.architecture-flow .flow-step{font-size:.82rem}}
 </style>""", unsafe_allow_html=True)
 
 PRESETS = {
@@ -253,9 +258,10 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         [item["name"], item["modality"], item["sample_size"], item["primary_metric"]] for item in datasets
     ], [42 * mm, 38 * mm, 57 * mm, 37 * mm])
     benchmark = research.get("benchmark_table", [])
-    add_table("Benchmark Matrix", [["Model", "Dataset", "Role", "Primary", "Latency"]] + [
-        [item["model_name"], item["dataset_name"], item["role"], item["primary_metric"], item["latency_ms"]] for item in benchmark
-    ], [40 * mm, 42 * mm, 25 * mm, 25 * mm, 25 * mm])
+    add_table("Benchmark Matrix", [["Model", "Dataset", "Role", "Primary", "Latency", "VRAM MB", "FLOPs G", "Evidence"]] + [
+        [item["model_name"], item["dataset_name"], item["role"], item["primary_metric"], item["latency_ms"], item.get("vram_mb", 0), item.get("flops_g", 0), item.get("evidence_type", "Planned")]
+        for item in benchmark
+    ], [31 * mm, 28 * mm, 16 * mm, 16 * mm, 17 * mm, 18 * mm, 15 * mm, 25 * mm])
     document.build(story)
     return buffer.getvalue()
 
@@ -548,35 +554,32 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     }
     pdf = pdf_report(paper, export_research)
     zip_bytes, artifact_dir = persist_artifacts(paper, export_research, pdf)
-    st.title(paper["title"])
-    st.caption(f"Full Academic Manuscript · IEEE/NeurIPS-inspired structure · Artifacts: `{artifact_dir}`")
-    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"])]
-    for title, body in sections:
-        st.subheader(title)
-        st.write(body)
-    st.subheader("Mathematical Formulation")
-    for formula in paper.get("mathematical_formulas", []):
-        st.latex(formula)
-    st.subheader("Threats to Validity")
-    for threat in paper.get("threats_to_validity", []):
-        st.markdown(f"- {threat}")
-    st.caption(f"Evidence status: {research.get('evidence_mode', 'Unknown')}")
     metadata = research.get("project_metadata") or {}
-    st.caption(f"{metadata.get('institution', 'PTIT')} · {metadata.get('subject', 'Hệ thống thông minh')} · GVHD: {metadata.get('instructor', 'N/A')} · SV: {metadata.get('student_name', 'N/A')} ({metadata.get('student_id', 'N/A')})")
-    st.subheader("References")
-    for index, reference in enumerate(paper["references"], 1):
-        st.markdown(f"{index}. {reference}")
-    st.subheader("🔬 Reproducibility: Models & Datasets Used")
-    st.caption("These catalogs define the benchmark matrix and manuscript content for the current topic.")
-    model_column, dataset_column = st.columns(2)
-    with model_column:
-        st.markdown("**Models / Architectures**")
-        st.dataframe(pd.DataFrame(research["models_compared"])[["name", "backbone", "params_m", "latency_ms"]], width="stretch", hide_index=True)
-    with dataset_column:
-        st.markdown("**Datasets / Evaluation Splits**")
-        st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], width="stretch", hide_index=True)
-    st.markdown("**Technical stack**")
-    st.write(", ".join(research.get("tech_stack", [])))
+    st.markdown(
+        f"<section class='hero'><h1>{escape(paper['title'])}</h1>"
+        "<p>PDF manuscript ready · PTIT · Academic layout</p>"
+        f"<span class='domain-badge'>{escape(str(metadata.get('subject', 'Hệ thống thông minh')))}</span></section>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("#### PDF Preview")
+    st.caption(
+        f"{metadata.get('institution', 'PTIT')} · GVHD: {metadata.get('instructor', 'N/A')} · "
+        f"SV: {metadata.get('student_name', 'N/A')} ({metadata.get('student_id', 'N/A')}) · "
+        f"Evidence: {research.get('evidence_mode', 'Unknown')}"
+    )
+    if hasattr(st, "pdf"):
+        try:
+            st.pdf(pdf, height=920)
+        except StreamlitAPIException:
+            encoded_pdf = base64.b64encode(pdf).decode("ascii")
+            st.components.v1.html(
+                f"<iframe class='pdf-preview' src='data:application/pdf;base64,{encoded_pdf}' "
+                "style='width:100%;height:900px;border:0' title='Generated PDF preview'></iframe>",
+                height=920,
+                scrolling=False,
+            )
+    else:
+        st.warning("PDF preview is unavailable in this Streamlit version; use the download button below.")
     st.download_button(
         "📥 Download Research Paper (.PDF)",
         pdf,
@@ -591,6 +594,36 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
         "application/zip",
         width="stretch",
     )
+    with st.expander("Show manuscript text and reproducibility details"):
+        sections = [
+            ("Abstract", paper["abstract"]),
+            ("Keywords", ", ".join(paper["keywords"])),
+            ("1. Introduction", paper["introduction"]),
+            ("2. Related Work", paper["related_work"]),
+            ("3. Proposed Methodology", paper["methodology"]),
+            ("4. Experimental Setup & Results", paper["experimental_results"]),
+            ("5. Discussion", paper["discussion"]),
+            ("6. Conclusion", paper["conclusion"]),
+        ]
+        for title, body in sections:
+            st.subheader(title)
+            st.write(body)
+        st.subheader("Mathematical Formulation")
+        for formula in paper.get("mathematical_formulas", []):
+            st.latex(formula)
+        st.subheader("Threats to Validity")
+        for threat in paper.get("threats_to_validity", []):
+            st.markdown(f"- {threat}")
+        st.subheader("References")
+        for index, reference in enumerate(paper["references"], 1):
+            st.markdown(f"{index}. {reference}")
+        st.subheader("Models and Datasets")
+        model_column, dataset_column = st.columns(2)
+        with model_column:
+            st.dataframe(pd.DataFrame(research["models_compared"])[["name", "backbone", "params_m", "latency_ms"]], width="stretch", hide_index=True)
+        with dataset_column:
+            st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], width="stretch", hide_index=True)
+        st.caption("Technical stack: " + (", ".join(research.get("tech_stack", [])) or "Not specified"))
     st.divider()
     st.subheader("💬 Ask This Research Paper")
     question = st.text_input("Ask questions about this generated paper", placeholder="e.g., What are the baseline comparisons? What is the core limitation?", key="paper_question")
@@ -655,12 +688,12 @@ def main() -> None:
         st.success("Live planner and writer are enabled with Gemini. Benchmark values still require validation with instrumented experiments before publication.")
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
-    tabs = st.tabs(["🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","🗃️ Verified Datasets","📐 Architecture & Mathematical Formulation","📄 Full Academic Paper","⚖️ Peer Review & Rubric"])
-    with tabs[0]: render_plan(plan)
-    with tabs[1]: render_benchmarks(research)
-    with tabs[2]: render_verified_datasets()
-    with tabs[3]: render_method(plan, paper)
-    with tabs[4]: render_paper(paper, research)
+    tabs = st.tabs(["📄 PDF Preview","🎯 Research Plan & Catalogs","📊 Benchmark & Ablation Charts","🗃️ Verified Datasets","📐 Architecture & Mathematical Formulation","⚖️ Peer Review & Rubric"])
+    with tabs[0]: render_paper(paper, research)
+    with tabs[1]: render_plan(plan)
+    with tabs[2]: render_benchmarks(research)
+    with tabs[3]: render_verified_datasets()
+    with tabs[4]: render_method(plan, paper)
     with tabs[5]: render_review(review)
 
 
