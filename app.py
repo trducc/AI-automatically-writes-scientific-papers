@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import base64
 import re
 import tempfile
 import time
@@ -16,7 +15,6 @@ from typing import Any
 import pandas as pd
 import requests
 import streamlit as st
-from streamlit.errors import StreamlitAPIException
 from backend.guardrail_agent import audit_manuscript
 from chart_generator import generate_research_charts
 from academic_sanitizer import sanitize_academic_topic
@@ -28,7 +26,7 @@ except ImportError:
     px = None
     HAS_PLOTLY = False
 
-st.set_page_config(page_title="Smart Research Lab", page_icon="SRL", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Phòng thí nghiệm nghiên cứu AI", page_icon="AI", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
 <style>
 :root{--ink:#e8eefc;--muted:#93a2bf;--panel:rgba(17,27,48,.8);--line:rgba(135,160,202,.24);--cyan:#50d9e9}
@@ -190,11 +188,11 @@ p {{ font-size: 11px; text-align: justify; margin: 0 0 15px; }}
 footer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #aeb8c7; color: #68758a; font: 10px Arial, sans-serif; text-align: center; }}
 @media print {{ body {{ background: white; }} .paper {{ margin: 0; padding: 0; box-shadow: none; }} }}
 </style></head><body><main class='paper'>
-<header><h1>{escape(paper['title'])}</h1><div class='meta'>Học viện Công nghệ Bưu chính Viễn thông (PTIT) · Hệ thống thông minh<br>GVHD: Thầy Hoàng Mạnh Cường · SV: Trần Văn Đức · B23DCCN191</div></header>
+<header><h1>{escape(paper['title'])}</h1><div class='meta'>Smart Research Lab · Academic manuscript</div></header>
 <div class='columns'>{body}<section><h2>Mathematical Formulation</h2>{formulas}</section></div>
 <div class='table-wrap'><h2>Models Used</h2>{models}<h2>Datasets Used</h2>{datasets}<h2>Benchmark Matrix</h2>{table}<h2>Ablation Study</h2>{ablations}<h2>Technical Stack</h2><p>{stack}</p><h2>Evidence Status</h2><p>{escape(research.get('evidence_mode', 'Unknown'))}</p><h2>Threats to Validity</h2><ul>{threats}</ul></div>
 <div class='references'><h2>References</h2><ol>{references}</ol></div>
-<footer>PTIT · Khoa Công nghệ Thông tin · Hệ thống thông minh · Thầy Hoàng Mạnh Cường · Trần Văn Đức (B23DCCN191)<br>Generated research artifact. Simulated metrics should be validated with instrumented experiments before publication.</footer>
+<footer>Smart Research Lab · Generated research artifact. Simulated metrics should be validated with instrumented experiments before publication.</footer>
 </main></body></html>"""
 
 
@@ -223,7 +221,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
     body_style = ParagraphStyle("PaperBody", parent=styles["BodyText"], leading=14, spaceAfter=7)
     small_style = ParagraphStyle("PaperSmall", parent=styles["BodyText"], fontSize=8, leading=10)
     story = [Paragraph(escape(paper["title"]), title_style)]
-    story.append(Paragraph("PTIT · Hệ thống thông minh · Smart Research Lab", small_style))
+    story.append(Paragraph("Smart Research Lab · Academic manuscript", small_style))
     story.append(Spacer(1, 8))
 
     sections = [
@@ -356,10 +354,7 @@ def _latex_source(paper: dict[str, Any], research: dict[str, Any]) -> str:
 \usepackage{{xcolor}}
 \usepackage{{hyperref}}
 \title{{{_latex_escape(paper["title"])}}}
-\author{{{_latex_escape(metadata.get("student_name", "Trần Văn Đức"))} \\
-{_latex_escape(metadata.get("institution", "Học viện Công nghệ Bưu chính Viễn thông (PTIT)"))}\\
-GVHD: {_latex_escape(metadata.get("instructor", "TS. Hoàng Mạnh Cường"))} \\
-MSV: {_latex_escape(metadata.get("student_id", "B23DCCN191"))}}}
+\\author{{Smart Research Lab}}
 \date{{}}
 \begin{{document}}
 \maketitle
@@ -460,7 +455,7 @@ def render_header(result: dict[str, Any]) -> None:
     plan, research, review = result["plan"], result["research"], result["review"]
     proposed = next(item for item in research["models_compared"] if item["role"] == "Proposed")
     proposed_row = next(item for item in research["benchmark_table"] if item["role"] == "Proposed")
-    st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Enterprise AI Research Lab · Multi-Agent Research Pipeline</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
+    st.markdown(f"<section class='hero'><h1>{escape(plan['title'])}</h1><p>Phòng thí nghiệm nghiên cứu AI · Hệ thống đa tác tử</p><span class='domain-badge'>{escape(plan['domain'])}</span></section>", unsafe_allow_html=True)
     metric_rows = [st.columns(3), st.columns(3)]
     cards = metric_rows[0] + metric_rows[1]
     cards[0].metric("Planned Primary Score", f"{proposed_row['primary_metric']:.2f}", "controlled estimate")
@@ -482,7 +477,7 @@ def render_plan(plan: dict[str, Any]) -> None:
     for index, dataset in enumerate(plan["datasets_catalog"]):
         with columns[index % 3]:
             st.markdown(f"<article class='glass-card'><h4>{escape(dataset['name'])}</h4><span class='badge'>{escape(dataset['modality'])}</span><p><b>Scale:</b> {escape(dataset['sample_size'])}<br><b>Input:</b> {escape(dataset['input_spec'])}<br><b>Metric:</b> {escape(dataset['primary_metric'])}</p><small>{escape(dataset['description'])}</small></article>", unsafe_allow_html=True)
-    st.subheader("🧠 Model Zoo & Architecture Registry")
+    st.subheader("🧠 Kho mô hình & kiến trúc")
     models = pd.DataFrame([item for item in plan["models_catalog"] if item["role"] == "Proposed"])
     st.dataframe(models[["name","backbone","params_m","flops_g","latency_ms","key_characteristic"]], width="stretch", hide_index=True)
     if HAS_PLOTLY:
@@ -491,7 +486,7 @@ def render_plan(plan: dict[str, Any]) -> None:
 
 
 def render_benchmarks(research: dict[str, Any]) -> None:
-    selected = st.selectbox("Dataset focus", [item["name"] for item in research["datasets_used"]])
+    selected = st.selectbox("Chọn tập dữ liệu", [item["name"] for item in research["datasets_used"]])
     curves = pd.DataFrame(research["training_curves"])
     curves = curves[curves["dataset_name"] == selected]
     left, right = st.columns(2)
@@ -500,9 +495,9 @@ def render_benchmarks(research: dict[str, Any]) -> None:
         score = curves[["epoch", "proposed_score"]].rename(columns={"proposed_score": "Primary Metric"})
         left.plotly_chart(px.line(loss, x="epoch", y="Loss", markers=True, template="plotly_dark", title="Training / validation loss"), width="stretch")
         right.plotly_chart(px.line(score, x="epoch", y="Primary Metric", markers=True, template="plotly_dark", title="Performance growth"), width="stretch")
-    st.subheader("Proposed Method Evaluation Matrix")
+    st.subheader("So sánh với bài gốc và các baseline")
     benchmark = pd.DataFrame(research["benchmark_table"])
-    benchmark = benchmark[benchmark["role"] == "Proposed"]
+    st.caption("Bảng này giữ cả baseline và phương pháp đề xuất để đối chiếu trực tiếp; các giá trị mô phỏng vẫn có nhãn bằng chứng.")
     st.dataframe(benchmark, width="stretch", hide_index=True)
     if HAS_PLOTLY:
         left, middle, right = st.columns(3)
@@ -510,12 +505,12 @@ def render_benchmarks(research: dict[str, Any]) -> None:
         middle.plotly_chart(px.bar(benchmark, x="model_name", y="latency_ms", title="Latency (ms)", template="plotly_dark"), width="stretch")
         right.plotly_chart(px.bar(benchmark, x="model_name", y="params_m", title="Parameters (M)" , template="plotly_dark"), width="stretch")
     if research.get("ablation_study"):
-        st.subheader("Component Ablation Study")
+        st.subheader("Thử nghiệm loại bỏ từng thành phần")
         ablation = pd.DataFrame(research["ablation_study"])
         st.dataframe(ablation, width="stretch", hide_index=True)
         if HAS_PLOTLY:
             st.plotly_chart(px.bar(ablation, x="configuration", y="primary_metric", color="removed_component", title="Effect of removing each component", template="plotly_dark"), width="stretch")
-    st.subheader("Key Empirical Findings")
+    st.subheader("Phát hiện chính")
     for finding in research["key_findings"]:
         st.markdown(f"- {finding}")
 
@@ -556,7 +551,7 @@ def render_verified_datasets() -> None:
 
 
 def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
-    st.subheader("Architecture Flow")
+    st.subheader("Luồng kiến trúc")
     flow_steps = [
         "Input data",
         "Domain encoder",
@@ -595,47 +590,37 @@ def render_method(plan: dict[str, Any], paper: dict[str, Any]) -> None:
 
 def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     pdf = st.session_state["pdf_bytes"]
-    metadata = research.get("project_metadata") or {}
     st.markdown(
         f"<section class='hero'><h1>{escape(paper['title'])}</h1>"
-        "<p>PDF manuscript ready · PTIT · Academic layout</p>"
-        f"<span class='domain-badge'>{escape(str(metadata.get('subject', 'Hệ thống thông minh')))}</span></section>",
+        "<p>Bản thảo PDF đã sẵn sàng · Bố cục học thuật</p>"
+        f"<span class='domain-badge'>{escape(str(research.get('inference_engine', {}).get('selected_domain', 'AI Research')))}</span></section>",
         unsafe_allow_html=True,
     )
-    st.markdown("#### PDF Preview")
-    st.caption(
-        f"{metadata.get('institution', 'PTIT')} · GVHD: {metadata.get('instructor', 'N/A')} · "
-        f"SV: {metadata.get('student_name', 'N/A')} ({metadata.get('student_id', 'N/A')}) · "
-        f"Evidence: {research.get('evidence_mode', 'Unknown')}"
-    )
-    if hasattr(st, "pdf"):
-        try:
-            st.pdf(pdf, height=920)
-        except StreamlitAPIException:
-            encoded_pdf = base64.b64encode(pdf).decode("ascii")
-            st.components.v1.html(
-                f"<iframe class='pdf-preview' src='data:application/pdf;base64,{encoded_pdf}' "
-                "style='width:100%;height:900px;border:0' title='Generated PDF preview'></iframe>",
-                height=920,
-                scrolling=False,
-            )
-    else:
-        st.warning("PDF preview is unavailable in this Streamlit version; use the download button below.")
+    st.markdown("#### Xem trước bản thảo")
+    try:
+        import pymupdf as fitz
+        document = fitz.open(stream=pdf, filetype="pdf")
+        for page_number, page in enumerate(document, 1):
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
+            st.image(pixmap.tobytes("png"), caption=f"Trang {page_number}", width="stretch")
+        document.close()
+    except (ImportError, RuntimeError, ValueError) as error:
+        st.warning(f"Không thể dựng ảnh xem trước PDF: {error}. Hãy tải file PDF bên dưới.")
     st.download_button(
-        "📥 Download Research Paper (.PDF)",
+        "📥 Tải bài báo PDF",
         pdf,
         "research_paper.pdf",
         "application/pdf",
         width="stretch",
     )
     st.download_button(
-        "📦 Download All Artifacts (.ZIP)",
+        "📦 Tải toàn bộ artifacts (.ZIP)",
         st.session_state["zip_bytes"],
         "research_artifacts.zip",
         "application/zip",
         width="stretch",
     )
-    with st.expander("Show manuscript text and reproducibility details"):
+    with st.expander("Xem nội dung bản thảo và thông tin tái lập"):
         sections = [
             ("Abstract", paper["abstract"]),
             ("Keywords", ", ".join(paper["keywords"])),
@@ -666,18 +651,18 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
             st.dataframe(pd.DataFrame(research["datasets_used"])[["name", "modality", "sample_size", "primary_metric", "source_url"]], width="stretch", hide_index=True)
         st.caption("Technical stack: " + (", ".join(research.get("tech_stack", [])) or "Not specified"))
     st.divider()
-    st.subheader("💬 Ask This Research Paper")
-    question = st.text_input("Ask questions about this generated paper", placeholder="e.g., What are the baseline comparisons? What is the core limitation?", key="paper_question")
+    st.subheader("💬 Hỏi về bài báo")
+    question = st.text_input("Đặt câu hỏi về bài báo", placeholder="Ví dụ: Bài báo so sánh với baseline nào?", key="paper_question")
     if question.strip():
-        with st.spinner("Analyzing the manuscript..."):
+        with st.spinner("Đang phân tích bản thảo..."):
             answer = answer_paper_question(question, paper, research)
         st.markdown(f"<div class='callout'><strong>Research Assistant</strong><br>{escape(answer)}</div>", unsafe_allow_html=True)
 
 
 def render_artifacts() -> None:
     artifact_dir = Path(st.session_state["artifact_dir"])
-    st.subheader("📦 Artifact vault")
-    st.caption("Các tệp đã được giữ trong session state; chuyển tab hoặc tải xuống không làm mất kết quả.")
+    st.subheader("📦 Kho tệp kết quả")
+    st.caption("Các tệp được giữ trong phiên làm việc; chuyển tab hoặc tải xuống không làm mất kết quả.")
     files = [
         ("📄 PDF", "pdf_bytes", "application/pdf", "research_paper.pdf"),
         ("🧾 LaTeX", "tex_bytes", "text/plain", "paper.tex"),
@@ -693,7 +678,7 @@ def render_artifacts() -> None:
                 unsafe_allow_html=True,
             )
             st.download_button(
-                f"Download {filename}",
+                f"Tải {filename}",
                 st.session_state[state_key],
                 filename,
                 mime,
@@ -701,16 +686,16 @@ def render_artifacts() -> None:
                 width="stretch",
             )
     st.divider()
-    st.caption(f"Generated artifact folder: {artifact_dir.name}")
+    st.caption(f"Thư mục kết quả: {artifact_dir.name}")
 
 
 def render_review(review: dict[str, Any]) -> None:
     metrics = st.columns(4)
-    for column, label, key in zip(metrics, ("Novelty","Technical Rigor","Clarity","Overall Score"), ("novelty_score","rigor_score","clarity_score","overall_score")):
+    for column, label, key in zip(metrics, ("Tính mới","Độ chặt chẽ","Độ rõ ràng","Điểm tổng"), ("novelty_score","rigor_score","clarity_score","overall_score")):
         column.metric(label, f"{review[key]:.1f} / 10")
-    st.markdown(f"<div class='callout'><strong>Verdict: {review['verdict']}</strong></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='callout'><strong>Đánh giá: {review['verdict']}</strong></div>", unsafe_allow_html=True)
     columns = st.columns(3)
-    for column, title, key in zip(columns, ("✅ Strengths","⚠️ Weaknesses","🛠️ Actionable Revisions"), ("strengths","weaknesses","revision_suggestions")):
+    for column, title, key in zip(columns, ("✅ Điểm mạnh","⚠️ Điểm yếu","🛠️ Đề xuất sửa"), ("strengths","weaknesses","revision_suggestions")):
         with column:
             st.subheader(title)
             for item in review[key]:
@@ -735,15 +720,15 @@ def main() -> None:
     }.items():
         st.session_state.setdefault(key, value)
     with st.sidebar:
-        st.markdown("## Research Control Room")
-        st.selectbox("⚡ Quick Demo Presets", [*PRESETS, CUSTOM], key="preset", on_change=apply_preset)
-        st.text_area("Research Topic", key="topic", height=90)
-        st.text_input("Domain", key="domain")
-        st.text_input("Primary Objective", key="objective")
-        st.text_area("Constraints", key="constraints", height=75)
-        run_clicked = st.button("🚀 Run Autonomous Research Pipeline", type="primary", width="stretch")
+        st.markdown("## Bảng điều khiển nghiên cứu")
+        st.selectbox("⚡ Chủ đề mẫu", [*PRESETS, CUSTOM], key="preset", on_change=apply_preset)
+        st.text_area("Chủ đề nghiên cứu", key="topic", height=90)
+        st.text_input("Lĩnh vực", key="domain")
+        st.text_input("Mục tiêu chính", key="objective")
+        st.text_area("Ràng buộc", key="constraints", height=75)
+        run_clicked = st.button("🚀 Bắt đầu sinh bài báo", type="primary", width="stretch")
     if run_clicked or not st.session_state["full_pipeline_result"]:
-        with st.status("🤖 Orchestrating Enterprise Multi-Agent Research Lab...", expanded=True) as status:
+        with st.status("🤖 Đang điều phối hệ thống nghiên cứu AI...", expanded=True) as status:
             status.write("⏳ Đang khởi tạo Planner Agent và phân loại chủ đề...")
             result = run_pipeline(st.session_state.topic, st.session_state.domain, st.session_state.objective, st.session_state.constraints)
             if not result:
@@ -781,10 +766,10 @@ def main() -> None:
     render_header(result)
     plan, research, paper, review = result["plan"], result["research"], result["paper"], result["review"]
     tabs = st.tabs([
-        "⚙️ Cấu hình Chủ đề & Tham số",
-        "📄 Xem trước Bản thảo",
-        "📊 Benchmark & Biểu đồ",
-        "📦 Artifacts & Tải xuống",
+        "⚙️ Cấu hình chủ đề",
+        "📄 Xem trước bản thảo",
+        "📊 So sánh & biểu đồ",
+        "📦 Tệp kết quả",
     ])
     with tabs[0]:
         render_plan(plan)
