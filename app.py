@@ -130,9 +130,9 @@ def paper_markdown(paper: dict[str, Any], research: dict[str, Any]) -> str:
     knowledge = research.get("knowledge_base", {})
     inference = research.get("inference_engine", {})
     coordination = research.get("agent_coordination", {})
-    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experimental Setup & Results", paper["experimental_results"]),("5. Discussion", paper["discussion"]),("6. Conclusion", paper["conclusion"]),("7. Threats to Validity", threats)]
+    sections = [("Abstract", paper["abstract"]),("Keywords", ", ".join(paper["keywords"])),("1. Introduction", paper["introduction"]),("2. Related Work", paper["related_work"]),("3. Proposed Methodology", paper["methodology"]),("4. Experiments & Comparative Evaluation", paper["experimental_results"]),("5. Discussion & Failure Mode Analysis", paper["discussion"]),("6. Conclusion & Future Directions", paper["conclusion"]),("Threats to Validity", threats)]
     refs = "\n".join(f"{i}. {item}" for i, item in enumerate(paper["references"], 1))
-    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Mathematical Formulation\n{formulas}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Benchmark Matrix\n{table}\n\n## Ablation Study\n{ablations}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## References\n{refs}\n"
+    return "# " + paper["title"] + f"\n\n## PTIT Project Metadata\n{metadata_text}\n\n" + "\n\n".join(f"## {title}\n{body}" for title, body in sections) + f"\n\n## Mathematical Formulation\n{formulas}\n\n## Intelligent-System Architecture\nKnowledge Base taxonomy: {', '.join(knowledge.get('taxonomy', []))}\n\nInference Engine: {inference.get('matching_strategy', 'Unknown')}\nSelected domain: {inference.get('selected_domain', 'Unknown')}\nMatched keywords: {', '.join(inference.get('matched_keywords', []))}\n\nMulti-Agent Coordination: {', '.join(coordination.get('agents', []))}\n\n## Models Used\n{models}\n\n## Datasets Used\n{datasets}\n\n## Technical Stack\n{stack}\n\n## Benchmark Matrix\n{table}\n\n## Ablation Study\n{ablations}\n\n## Evidence Status\n{research.get('evidence_mode', 'Unknown')}\n\n## Intelligent-System Metrics\nReasoning Consistency Score: {research.get('reasoning_consistency_score', 0):.2f}\nKnowledge Retrieval Precision: {research.get('knowledge_retrieval_precision', 0):.2f}\n\n## 7. References\n{refs}\n"
 
 
 def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
@@ -141,9 +141,9 @@ def ieee_html_report(paper: dict[str, Any], research: dict[str, Any]) -> str:
         ("1. Introduction", paper["introduction"]),
         ("2. Related Work", paper["related_work"]),
         ("3. Proposed Methodology", paper["methodology"]),
-        ("4. Experimental Setup & Results", paper["experimental_results"]),
-        ("5. Discussion", paper["discussion"]),
-        ("6. Conclusion", paper["conclusion"]),
+        ("4. Experiments & Comparative Evaluation", paper["experimental_results"]),
+        ("5. Discussion & Failure Mode Analysis", paper["discussion"]),
+        ("6. Conclusion & Future Directions", paper["conclusion"]),
     ]
     body = "".join(f"<section><h2>{escape(title)}</h2><p>{escape(text).replace(chr(10), '<br>')}</p></section>" for title, text in sections)
     formulas = "".join(f"<div class='formula'>{escape(formula)}</div>" for formula in paper["mathematical_formulas"])
@@ -220,12 +220,36 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         ("1. Introduction", paper["introduction"]),
         ("2. Related Work", paper["related_work"]),
         ("3. Proposed Methodology", paper["methodology"]),
-        ("4. Experimental Setup & Results", paper["experimental_results"]),
-        ("5. Discussion", paper["discussion"]),
-        ("6. Conclusion", paper["conclusion"]),
+        ("4. Experiments & Comparative Evaluation", paper["experimental_results"]),
+        ("5. Discussion & Failure Mode Analysis", paper["discussion"]),
+        ("6. Conclusion & Future Directions", paper["conclusion"]),
     ]
+
+    subheading_style = ParagraphStyle(
+        "PaperSubheading",
+        parent=heading_style,
+        fontSize=10,
+        leading=12,
+        textColor=colors.HexColor("#365b80"),
+        spaceBefore=7,
+        spaceAfter=3,
+    )
+
+    def add_academic_text(content: str) -> None:
+        for raw_block in content.split("\n\n"):
+            block = raw_block.strip()
+            if not block:
+                continue
+            lines = block.splitlines()
+            if lines and lines[0].startswith("### "):
+                story.append(Paragraph(escape(lines[0][4:]), subheading_style))
+                block = "\n".join(lines[1:]).strip()
+            if block:
+                story.append(Paragraph(escape(block).replace("\n", "<br/>"), body_style))
+
     for heading, content in sections:
-        story.extend([Paragraph(escape(heading), heading_style), Paragraph(escape(content).replace("\n", "<br/>"), body_style)])
+        story.append(Paragraph(escape(heading), heading_style))
+        add_academic_text(content)
 
     story.append(Paragraph("Mathematical Formulation", heading_style))
     for formula in paper.get("mathematical_formulas", []):
@@ -262,6 +286,9 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         [item["model_name"], item["dataset_name"], item["role"], item["primary_metric"], item["latency_ms"], item.get("vram_mb", 0), item.get("flops_g", 0), item.get("evidence_type", "Planned")]
         for item in benchmark
     ], [31 * mm, 28 * mm, 16 * mm, 16 * mm, 17 * mm, 18 * mm, 15 * mm, 25 * mm])
+    story.append(Paragraph("7. References", heading_style))
+    for index, reference in enumerate(paper.get("references", []), 1):
+        story.append(Paragraph(f"{index}. {escape(reference)}", small_style))
     document.build(story)
     return buffer.getvalue()
 
