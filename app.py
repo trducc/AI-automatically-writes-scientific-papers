@@ -57,6 +57,8 @@ div[data-testid="stCodeBlock"] pre *,div[data-testid="stCodeBlock"] code *,.stCo
 .block-container{width:min(100% - 2rem,1540px);max-width:1540px;padding-top:1.25rem;padding-bottom:4rem}.hero{background:linear-gradient(115deg,rgba(24,57,93,.96),rgba(15,27,50,.78));border:1px solid rgba(80,217,233,.32);border-radius:20px;padding:clamp(1.2rem,3vw,2rem) clamp(1.1rem,3vw,2.3rem);margin-bottom:1.1rem;box-shadow:0 20px 55px #0004}.hero h1{color:#f8fbff!important;margin:0 0 .55rem;font-size:clamp(1.55rem,3.4vw,2.35rem);line-height:1.12;overflow-wrap:anywhere;word-break:normal}.hero p{color:#b9c8e2!important;margin:0;line-height:1.45}.badge,.domain-badge{display:inline-block;padding:.3rem .68rem;border-radius:999px;font-size:.75rem;font-weight:750}.domain-badge{background:var(--cyan);color:#06131d!important;margin-top:.9rem}.glass-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;min-height:185px;box-shadow:0 14px 32px #0003;overflow-wrap:anywhere}.glass-card h4{margin:0 0 .45rem;color:#f8fbff!important}.glass-card p,.glass-card small{color:var(--muted)!important}.callout{background:#50d9e914;border:1px solid #50d9e947;border-left:4px solid var(--cyan);border-radius:12px;padding:1rem 1.2rem;margin:.5rem 0 1rem;overflow-wrap:anywhere}[data-testid="stMetric"]{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;min-width:0}[data-testid="stMetric"] label{color:var(--muted)!important}[data-testid="stMetric"] [data-testid="stMetricValue"]{color:#f8fbff!important}[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input,div[data-baseweb="select"]>div,[role="option"]{background:#101a2d!important;color:var(--ink)!important;border-color:var(--line)!important}.stTabs [data-baseweb="tab-list"]{gap:.4rem;background:#0a111f8f;padding:.35rem;border-radius:13px;overflow-x:auto;scrollbar-width:thin}.stTabs [data-baseweb="tab"]{border-radius:9px;color:var(--muted)!important;white-space:normal!important;text-align:center;min-height:2.5rem}.stTabs [aria-selected="true"]{background:#50d9e929;color:#e8ffff!important}.stButton>button[kind="primary"]{background:linear-gradient(110deg,#16a6c0,#3ccf9a);color:#04131c!important;border:0;font-weight:800;min-height:3rem}
 .stDataFrame,.stTable{width:100%;max-width:100%;overflow-x:auto;border-radius:12px}
 [data-testid="stDataFrame"]{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+[data-testid="stImage"],[data-testid="stImage"]>div,[data-testid="stImage"] img{width:100%!important;max-width:100%!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
+[data-testid="stImage"]{margin:0 0 1rem!important}
 [data-testid="stExpander"]{border:1px solid var(--line);border-radius:12px;background:rgba(17,27,48,.48)}
 .artifact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
 .artifact-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;min-width:0;overflow-wrap:anywhere}
@@ -255,7 +257,7 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
                 story.append(Paragraph(escape(lines[0][4:]), subheading_style))
                 block = "\n".join(lines[1:]).strip()
             if block:
-                story.append(Paragraph(escape(block).replace("\n", "<br/>"), body_style))
+                story.append(Paragraph(escape(_plain_academic_text(block)).replace("\n", "<br/>"), body_style))
 
     for heading, content in sections:
         story.append(Paragraph(escape(heading), heading_style))
@@ -263,7 +265,11 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
 
     story.append(Paragraph("Mathematical Formulation", heading_style))
     for formula in paper.get("mathematical_formulas", []):
-        story.append(Paragraph(escape(formula), ParagraphStyle("Formula", parent=body_style, alignment=TA_CENTER, backColor=colors.HexColor("#f3f6fa"), borderColor=colors.HexColor("#278ea5"), borderWidth=1, borderPadding=6)))
+        formula_image = _formula_image(formula)
+        if formula_image:
+            story.append(Image(BytesIO(formula_image), width=150 * mm, height=18 * mm))
+        else:
+            story.append(Paragraph(escape(_clean_formula(formula)), ParagraphStyle("FormulaFallback", parent=body_style, alignment=TA_CENTER, backColor=colors.HexColor("#f3f6fa"), borderColor=colors.HexColor("#278ea5"), borderWidth=1, borderPadding=6)))
 
     story.append(Paragraph("Threats to Validity", heading_style))
     for threat in paper.get("threats_to_validity", []):
@@ -305,6 +311,54 @@ def pdf_report(paper: dict[str, Any], research: dict[str, Any]) -> bytes:
         story.append(Paragraph(f"{index}. {escape(reference)}", small_style))
     document.build(story)
     return buffer.getvalue()
+
+
+def _clean_formula(formula: str) -> str:
+    value = str(formula).replace(r"\qqad", r"\qquad").strip()
+    value = value.replace(r"\mathcal{L}", "L").replace(r"\lambda", "lambda")
+    value = value.replace(r"\lVert", "||").replace(r"\rVert", "||")
+    return value.replace("{", "").replace("}", "")
+
+
+def _math_formula(formula: str) -> str:
+    return (
+        str(formula)
+        .replace(r"\qqad", r"\qquad")
+        .replace(r"\lVert", r"\Vert")
+        .replace(r"\rVert", r"\Vert")
+        .strip()
+    )
+
+
+def _plain_academic_text(text: str) -> str:
+    value = re.sub(r"\$\$.*?\$\$", "[mathematical formulation]", str(text), flags=re.DOTALL)
+    value = re.sub(r"\\\(.*?\\\)", "[mathematical expression]", value, flags=re.DOTALL)
+    replacements = {
+        r"\mathcal": "L",
+        r"\sigma": "sigma",
+        r"\lambda": "lambda",
+        r"\qquad": " ",
+        r"\lVert": "||",
+        r"\rVert": "||",
+    }
+    for source, target in replacements.items():
+        value = value.replace(source, target)
+    return value.replace("\\", "")
+
+
+def _formula_image(formula: str) -> bytes | None:
+    """Render LaTeX math to a transparent PNG so ReportLab never prints raw commands."""
+    try:
+        import matplotlib.pyplot as plt
+
+        figure = plt.figure(figsize=(10, 0.8), dpi=180)
+        figure.text(0.5, 0.5, f"${_math_formula(formula)}$", ha="center", va="center", fontsize=14)
+        output = BytesIO()
+        figure.savefig(output, format="png", dpi=180, transparent=True, bbox_inches="tight", pad_inches=0.12)
+        plt.close(figure)
+        return output.getvalue()
+    except (ImportError, RuntimeError, ValueError):
+        return None
 
 
 def _latex_escape(value: Any) -> str:
@@ -600,9 +654,13 @@ def render_paper(paper: dict[str, Any], research: dict[str, Any]) -> None:
     try:
         import pymupdf as fitz
         document = fitz.open(stream=pdf, filetype="pdf")
+        st.session_state["pdf_pages_images"] = []
         for page_number, page in enumerate(document, 1):
             pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
-            st.image(pixmap.tobytes("png"), caption=f"Trang {page_number}", width="stretch")
+            page_image = pixmap.tobytes("png")
+            st.session_state["pdf_pages_images"].append(page_image)
+            st.image(page_image, width="stretch")
+            st.caption(f"Trang {page_number}")
         document.close()
     except (ImportError, RuntimeError, ValueError) as error:
         st.warning(f"Không thể dựng ảnh xem trước PDF: {error}. Hãy tải file PDF bên dưới.")
