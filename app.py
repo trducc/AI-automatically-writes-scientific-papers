@@ -2004,40 +2004,47 @@ def render_plan(plan: dict[str, Any]) -> None:
 
 
 def render_benchmarks(research: dict[str, Any]) -> None:
-    selected = st.selectbox("Chọn tập dữ liệu", [item["name"] for item in research["datasets_used"]])
     primary_metric = metric_explanation(research)
     curves = pd.DataFrame(research["training_curves"])
-    curves = curves[curves["dataset_name"] == selected]
     left, right = st.columns(2)
-    if HAS_PLOTLY:
-        loss = curves[["epoch", "proposed_loss"]]
-        score = curves[["epoch", "proposed_score"]]
-        left.plotly_chart(
-            px.line(
-                loss,
-                x="epoch",
-                y="proposed_loss",
-                markers=True,
-                template="plotly_dark",
-                title="Validation Loss (Loss xác thực)",
-                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_loss": "Validation Loss (Sai số dự đoán; thấp hơn tốt hơn)"},
-                hover_data={"epoch": True, "proposed_loss": ":.4f"},
-            ),
-            width="stretch",
+    if HAS_PLOTLY and not curves.empty:
+        color_col = "dataset_name" if "dataset_name" in curves.columns else None
+        legend_layout = {"height": 360, "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1}}
+        loss_fig = px.line(
+            curves,
+            x="epoch",
+            y="proposed_loss",
+            color=color_col,
+            markers=True,
+            template="plotly_dark",
+            title="Validation Loss (Loss xác thực)",
+            labels={
+                "epoch": "Epoch (Vòng huấn luyện)",
+                "proposed_loss": "Validation Loss (Sai số dự đoán; thấp hơn tốt hơn)",
+                "dataset_name": "Dataset (Tập dữ liệu)",
+            },
+            hover_data={"epoch": True, "proposed_loss": ":.4f"},
         )
-        right.plotly_chart(
-            px.line(
-                score,
-                x="epoch",
-                y="proposed_score",
-                markers=True,
-                template="plotly_dark",
-                title=f"Primary Metric (Chỉ số chính: {primary_metric})",
-                labels={"epoch": "Epoch (Vòng huấn luyện)", "proposed_score": f"Primary Metric (Chỉ số chính: {primary_metric})"},
-                hover_data={"epoch": True, "proposed_score": ":.4f"},
-            ),
-            width="stretch",
+        loss_fig.update_layout(**legend_layout)
+        left.plotly_chart(loss_fig, width="stretch")
+
+        score_fig = px.line(
+            curves,
+            x="epoch",
+            y="proposed_score",
+            color=color_col,
+            markers=True,
+            template="plotly_dark",
+            title=f"Primary Metric (Chỉ số chính: {primary_metric})",
+            labels={
+                "epoch": "Epoch (Vòng huấn luyện)",
+                "proposed_score": f"Primary Metric (Chỉ số chính: {primary_metric})",
+                "dataset_name": "Dataset (Tập dữ liệu)",
+            },
+            hover_data={"epoch": True, "proposed_score": ":.4f"},
         )
+        score_fig.update_layout(**legend_layout)
+        right.plotly_chart(score_fig, width="stretch")
     st.subheader("So sánh các mô hình trong benchmark nội bộ")
     benchmark = pd.DataFrame(research["benchmark_table"])
     st.caption("Bảng và biểu đồ đối chiếu phương pháp đề xuất với các baseline do hệ thống tạo cho benchmark này. Đây không phải so sánh với PDF bài báo gốc đã upload; xem nhận xét bài mẫu ở tab Cấu hình chủ đề.")
